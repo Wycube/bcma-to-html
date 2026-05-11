@@ -11,40 +11,39 @@ class Canvas:
         self.children.append(element)
     
     def print(self):
-        print("Layout: ({} {})".format(*self.canvas_size))
+        str = "Layout: ({}, {})\n".format(self.origin_type, self.canvas_size)
 
         for child in self.children:
-            child.print(1)
+            str += child.print(1)
+        
+        return str
 
 class TextureList:
     def __init__(self):
         pass
 
     def print(self, level):
-        for i in range(level):
-            print(" ", end="")
-        
-        print("TextureList")
+        str = " " * level
+        str += "TextureList\n"
+        return str
 
 class FontList:
     def __init__(self):
         pass
 
     def print(self, level):
-        for i in range(level):
-            print(" ", end="")
-        
-        print("FontList")
+        str = " " * level
+        str += "FontList\n"
+        return str
 
 class MaterialList:
     def __init__(self):
         pass
 
     def print(self, level):
-        for i in range(level):
-            print(" ", end="")
-        
-        print("MaterialList")
+        str = " " * level
+        str += "MaterialList\n"
+        return str
 
 class Pane:
     def __init__(self, flags, origin, alpha, padding, name, data, translation, rotation, scale, size):
@@ -52,7 +51,7 @@ class Pane:
         self.origin = origin
         self.alpha = alpha
         self.padding = padding
-        self.name = name.decode("utf-8").strip('/0')
+        self.name = name.decode("utf-8").strip('\0')
         self.data = data
         self.translation = translation
         self.rotation = rotation
@@ -64,23 +63,22 @@ class Pane:
         self.children.append(element)
     
     def print(self, level):
-        for i in range(level):
-            print(" ", end="")
-        
-        print("Pane ({})".format(self.name))
+        str = " " * level
+        str += "Pane ({}, translation{}, rotation{}, scale{}, size{})\n".format(self.name, self.translation, self.rotation, self.scale, self.size)
 
         for child in self.children:
-            child.print(level + 1)
+            str += child.print(level + 1)
+
+        return str
 
 class Picture:
     def __init__(self):
         pass
 
     def print(self, level):
-        for i in range(level):
-            print(" ", end="")
-        
-        print("Picture")
+        str = " " * level
+        str += "Picture\n"
+        return str
 
 class Text:
     def __init__(self, flags, origin, alpha, padding, name, data, translation, rotation, scale, size, 
@@ -89,7 +87,7 @@ class Text:
         self.origin = origin
         self.alpha = alpha
         self.padding = padding
-        self.name = name.decode("utf-8").strip('/0')
+        self.name = name.decode("utf-8").strip('\0')
         self.data = data
         self.translation = translation
         self.rotation = rotation
@@ -108,50 +106,46 @@ class Text:
         self.text = text
 
     def print(self, level):
-        for i in range(level):
-            print(" ", end="")
-        
-        print("Text: ({})".format(self.name))
+        str = " " * level
+        str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), h_flags({}), v_flags({}), flags({}), padding({}), text:'{}')\n".format(self.name, self.translation, self.rotation, self.scale, self.size, self.font_scale, self.h_font_space, self.v_font_space, self.h_flags, self.v_flags, self.flags_2, self.padding_2, self.text)
+        return str
 
 class Window:
     def __init__(self):
         pass
 
     def print(self, level):
-        for i in range(level):
-            print(" ", end="")
-        
-        print("Window")
+        str = " " * level
+        str += "Window\n"
+        return str
 
 class Bounding:
     def __init__(self):
         pass
 
     def print(self, level):
-        for i in range(level):
-            print(" ", end="")
-        
-        print("Bounding")
+        str = " " * level
+        str += "Bounding\n"
+        return str
 
 class Group:
-    def __init__(self):
-        pass
+    def __init__(self, name, refs):
+        self.name = name.decode("utf-8").strip('\0')
+        self.refs = refs
 
     def print(self, level):
-        for i in range(level):
-            print(" ", end="")
-        
-        print("Group")
+        str = " " * level
+        str += "Group({}, {})\n".format(self.name, self.refs)
+        return str
 
 class UserData:
-    def __init__(self):
-        pass
+    def __init__(self, dict):
+        self.dict = dict
 
     def print(self, level):
-        for i in range(level):
-            print(" ", end="")
-        
-        print("UserData")
+        str = " " * level
+        str += "UserData({})\n".format(self.dict)
+        return str
 
 class LayoutTree:
     def __init__(self, canvas_layout):
@@ -181,7 +175,7 @@ class LayoutTree:
         pass
 
     def print(self):
-        self.root.print()
+        return self.root.print()
 
 def parse_lyt1(buffer, offset):
     layout_data = struct.unpack("<I2f", buffer[offset + 8:offset + 20])
@@ -224,10 +218,32 @@ def parse_bnd1(buffer, offset):
     return Bounding()
 
 def parse_grp1(buffer, offset):
-    return Group()
+    group_data = struct.unpack("<16sI", buffer[offset + 8:offset + 0x1C])
+    refs = []
+    print(group_data[1])
+    for i in range(group_data[1]):
+        entry_off = 0x10 * i
+        refs.append(buffer[offset + 0x1C + entry_off:offset + 0x2C + entry_off].decode("utf-8"))
 
-def parse_usd1(buffer, offset):
-    return UserData()
+    return Group(group_data[0], refs)
+
+def parse_usd1(buffer : bytes, offset):
+    entry_count = struct.unpack("<I", buffer[offset + 8:offset + 0xC])[0]
+    dict = {}
+    for i in range(entry_count):
+        start = offset + 0xC + 0xC * i
+        end = start + 0xC
+        entry = struct.unpack("<IIHH", buffer[start:end])
+
+        key = buffer[start + entry[0]:].decode("ascii", errors="replace").split('\0')[0]
+        value = None
+        match entry[3]:
+            case 0 : value = buffer[start + entry[1]:start + entry[1] + entry[2]].decode("utf-8")
+            case 1 : value = [struct.unpack("<I", buffer[start + entry[1] + i * 4:start + entry[1] + i * 4 + 4])[0] for i in range(entry[2])]
+            case 2 : value = [struct.unpack("<f", buffer[start + entry[1] + i * 4:start + entry[1] + i * 4 + 4])[0] for i in range(entry[2])]
+        dict[key] = value
+
+    return UserData(dict)
 
 def parse_layout_element(buffer, offset, layout):
     signature = buffer[offset:offset + 4]
@@ -290,10 +306,43 @@ def convert(node, html_file, css_file):
         css_file.write("    top: {}px;\n".format(-node.translation[1]))
         css_file.write("    width: {}px;\n".format(node.size[0]))
         css_file.write("    height: {}px;\n".format(node.size[1]))
+        css_file.write("    font-size: {}px;\n".format(node.font_scale[1 ]))
         css_file.write("}\n")
 
     if type(node) == Pane:
         html_file.write("</div>\n")
+
+def convert_txt(tree, text_file, depth):
+    text = tree.print()
+    text_file.write(text)
+    
+
+    return
+
+    if type(node) == Pane:
+        text_file.write("{{:{}}}".format(depth).format(' '))
+        text_file.write("{}\n".format(node.name))
+        text_file.write("{{:{}}}".format(depth).format(' '))
+        text_file.write(" translation: {}, {}\n".format(*node.translation))
+        text_file.write("{{:{}}}".format(depth).format(' '))
+        text_file.write(" size: {}, {}\n".format(*node.size))
+
+    if type(node) == Canvas or type(node) == Pane:
+        for child in node.children:
+            convert_txt(child, text_file, depth + 1)
+    elif type(node) == Text:
+        text_file.write("{{:{}}}".format(depth).format(' '))
+        text_file.write("{}\n".format(node.name))
+        text_file.write("{{:{}}}".format(depth).format(' '))
+        text_file.write(" text: {}".format(node.text))
+
+        if node.text[-1] != '\n':
+            text_file.write("\n")
+
+        text_file.write("{{:{}}}".format(depth).format(' '))
+        text_file.write(" translation: {}, {}\n".format(*node.translation))
+        text_file.write("{{:{}}}".format(depth).format(' '))
+        text_file.write(" size: {}, {}\n".format(*node.size))
 
 def main():
     bcma_path = sys.argv[1]
@@ -303,7 +352,7 @@ def main():
         buffer = file.read()
     
     layout_tree = parse_layout(buffer, 0x14)
-    layout_tree.print()
+    # print(layout_tree.print())
 
     # Get all files from the archive
 
@@ -312,26 +361,28 @@ def main():
 
 
     # Convert the bclyt
-    with open("out.html", "w") as html_file:
-        with open("out.css", "w") as css_file:
-            css_file.write("body, div, p {\n")
-            css_file.write("    margin: 0;\n")
-            css_file.write("    padding: 0;\n")
-            css_file.write("}\n")
+    with open("output/out.html", "w") as html_file, open("output/out.css", "w") as css_file:
+        css_file.write("body, div, p {\n")
+        css_file.write("    margin: 0;\n")
+        css_file.write("    padding: 0;\n")
+        css_file.write("}\n")
 
-            html_file.write("<!DOCTYPE html>\n")
-            html_file.write("<html>\n")
-            html_file.write("    <head>\n")
-            html_file.write("        <title>bcma2html test</title>\n")
-            html_file.write("        <meta charse=\"utf-8\">\n")
-            html_file.write("        <link rel=\"stylesheet\" href=\"out.css\">\n")
-            html_file.write("    </head>\n")
-            html_file.write("    <body>\n")
+        html_file.write("<!DOCTYPE html>\n")
+        html_file.write("<html>\n")
+        html_file.write("    <head>\n")
+        html_file.write("        <title>bcma2html test</title>\n")
+        html_file.write("        <meta charse=\"utf-8\">\n")
+        html_file.write("        <link rel=\"stylesheet\" href=\"out.css\">\n")
+        html_file.write("    </head>\n")
+        html_file.write("    <body>\n")
 
-            convert(layout_tree.root, html_file, css_file)
+        convert(layout_tree.root, html_file, css_file)
 
-            html_file.write("    </body>\n")
-            html_file.write("</html>\n")
+        html_file.write("    </body>\n")
+        html_file.write("</html>\n")
+    
+    with open("output/out.txt", "w", encoding="utf-8") as text_file:
+        convert_txt(layout_tree, text_file, 0)
     
     print("Successfully Completed!")
 
