@@ -203,9 +203,6 @@ def parse_pic1(buffer, offset):
 def parse_txt1(buffer, offset):
     pane_data = struct.unpack("<bbbb16s8s3f3f2f2f", buffer[offset + 8:offset + 0x4C])
     text_data = struct.unpack("<HHIHHIII2fff", buffer[offset + 0x4C:offset + 0x74])
-    # print(layout_data)
-    # print("{}:\n Translation: ({}, {}, {})\n Rotation: ({}, {}, {})\n Scale: ({}, {})\n Size({}, {})".format(layout_data[5], *layout_data[7:]))
-
     text_offset = text_data[5]
     string = buffer[offset + text_offset:offset + struct.unpack("<I", buffer[offset + 4:offset + 8])[0]].decode("utf-16")
 
@@ -315,34 +312,6 @@ def convert(node, html_file, css_file):
 def convert_txt(tree, text_file, depth):
     text = tree.print()
     text_file.write(text)
-    
-
-    return
-
-    if type(node) == Pane:
-        text_file.write("{{:{}}}".format(depth).format(' '))
-        text_file.write("{}\n".format(node.name))
-        text_file.write("{{:{}}}".format(depth).format(' '))
-        text_file.write(" translation: {}, {}\n".format(*node.translation))
-        text_file.write("{{:{}}}".format(depth).format(' '))
-        text_file.write(" size: {}, {}\n".format(*node.size))
-
-    if type(node) == Canvas or type(node) == Pane:
-        for child in node.children:
-            convert_txt(child, text_file, depth + 1)
-    elif type(node) == Text:
-        text_file.write("{{:{}}}".format(depth).format(' '))
-        text_file.write("{}\n".format(node.name))
-        text_file.write("{{:{}}}".format(depth).format(' '))
-        text_file.write(" text: {}".format(node.text))
-
-        if node.text[-1] != '\n':
-            text_file.write("\n")
-
-        text_file.write("{{:{}}}".format(depth).format(' '))
-        text_file.write(" translation: {}, {}\n".format(*node.translation))
-        text_file.write("{{:{}}}".format(depth).format(' '))
-        text_file.write(" size: {}, {}\n".format(*node.size))
 
 def main():
     bcma_path = sys.argv[1]
@@ -352,7 +321,6 @@ def main():
         buffer = file.read()
     
     layout_tree = parse_layout(buffer, 0x14)
-    # print(layout_tree.print())
 
     # Get all files from the archive
 
