@@ -1,4 +1,4 @@
-import struct, sys
+import struct, sys, os
 
 
 class Canvas:
@@ -9,6 +9,45 @@ class Canvas:
     
     def add(self, element):
         self.children.append(element)
+
+    def get_user_data(self, name):
+        # Look through all layers and find a pane/text matching the name.
+        # If there is a user data after it, return that.
+        check_next = False
+        for obj in self.children:
+            if check_next and isinstance(obj, UserData):
+                return obj
+            else:
+                check_next = False
+
+            if isinstance(obj, Pane):
+                result = obj.get_user_data(name)
+                if result is not None:
+                    return result
+
+                check_next = obj.name == name
+
+            if isinstance(obj, Text):
+                check_next = obj.name == name
+
+        return None
+    
+    def get_named_obj(self, name):
+        # Look through all layers and find a pane/text/group matching the name.
+        for obj in self.children:
+            if not (isinstance(obj, Pane) or isinstance(obj, Text) or isinstance(obj, Group)):
+                continue
+
+            if isinstance(obj, Pane) and obj.name != name:
+                result = obj.get_named_obj(name)
+                if result is not None:
+                    return result
+                continue
+
+            if obj.name == name:
+                return obj
+
+        return None
     
     def print(self):
         str = "Layout: ({}, {})\n".format(self.origin_type, self.canvas_size)
@@ -61,7 +100,46 @@ class Pane:
 
     def add(self, element):
         self.children.append(element)
-    
+
+    def get_user_data(self, name):
+        # Look through all layers and find a pane/text matching the name.
+        # If there is a user data after it, return that.
+        check_next = False
+        for obj in self.children:
+            if check_next and isinstance(obj, UserData):
+                return obj
+            else:
+                check_next = False
+
+            if isinstance(obj, Pane):
+                result = obj.get_user_data(name)
+                if result is not None:
+                    return result
+
+                check_next = obj.name == name
+
+            if isinstance(obj, Text):
+                check_next = obj.name == name
+
+        return None
+
+    def get_named_obj(self, name):
+        # Look through all layers and find a pane/text/group matching the name.
+        for obj in self.children:
+            if not (isinstance(obj, Pane) or isinstance(obj, Text) or isinstance(obj, Group)):
+                continue
+
+            if isinstance(obj, Pane) and obj.name != name:
+                result = obj.get_named_obj(name)
+                if result is not None:
+                    return result
+                continue
+
+            if obj.name == name:
+                return obj
+
+        return None
+
     def print(self, level):
         str = " " * level
         str += "Pane ({}, translation{}, rotation{}, scale{}, size{})\n".format(self.name, self.translation, self.rotation, self.scale, self.size)
@@ -176,6 +254,12 @@ class LayoutTree:
 
     def print(self):
         return self.root.print()
+    
+    def get_user_data(self, name):
+        return self.root.get_user_data(name)
+    
+    def get_named_obj(self, name):
+        return self.root.get_named_obj(name)
 
 def parse_lyt1(buffer, offset):
     layout_data = struct.unpack("<I2f", buffer[offset + 8:offset + 20])
@@ -193,7 +277,6 @@ def parse_mat1(buffer, offset):
 
 def parse_pan1(buffer, offset):
     layout_data = struct.unpack("<bbbb16s8s3f3f2f2f", buffer[offset + 8:offset + 0x4C])
-    print(layout_data)
 
     return Pane(*layout_data[:6], layout_data[6:9], layout_data[9:12], layout_data[12:14], layout_data[14:])
 
@@ -217,7 +300,6 @@ def parse_bnd1(buffer, offset):
 def parse_grp1(buffer, offset):
     group_data = struct.unpack("<16sI", buffer[offset + 8:offset + 0x1C])
     refs = []
-    print(group_data[1])
     for i in range(group_data[1]):
         entry_off = 0x10 * i
         refs.append(buffer[offset + 0x1C + entry_off:offset + 0x2C + entry_off].decode("utf-8"))
@@ -245,7 +327,7 @@ def parse_usd1(buffer : bytes, offset):
 def parse_layout_element(buffer, offset, layout):
     signature = buffer[offset:offset + 4]
     section_size = struct.unpack("<I", buffer[offset + 4:offset + 8])[0]
-    print(signature, section_size)
+    # print(signature, section_size)
 
     match signature:
         case b'lyt1': layout = parse_lyt1(buffer, offset)
@@ -275,6 +357,32 @@ def parse_layout(buffer, offset):
         offset, layout = parse_layout_element(buffer, offset, layout)
 
     return layout
+
+def export(trees, path):
+    css_name = os.path.basename(path)
+    with open(f"{path}.html", "w", encoding="utf-8") as html_file, open(f"{path}.css", "w", encoding="utf-8") as css_file:
+        css_file.write("body, div, p {\n")
+        css_file.write("    margin: 0;\n")
+        css_file.write("    padding: 0;\n")
+        css_file.write("}\n")
+
+        html_file.write("<!DOCTYPE html>\n")
+        html_file.write("<html>\n")
+        html_file.write("    <head>\n")
+        html_file.write("        <title>bcma2html test</title>\n")
+        html_file.write("        <meta charse=\"utf-8\">\n")
+        html_file.write(f"        <link rel=\"stylesheet\" href=\"{css_name}.css\">\n")
+        html_file.write("    </head>\n")
+        html_file.write("    <body>\n")
+
+        for tree in trees:
+            convert(tree.root, html_file, css_file)
+
+        html_file.write("    </body>\n")
+        html_file.write("</html>\n")
+    
+    with open(f"{path}.txt", "w", encoding="utf-8") as text_file:
+        convert_txt(tree, text_file)
 
 def convert(node, html_file, css_file):
     if type(node) == Pane:
@@ -309,18 +417,27 @@ def convert(node, html_file, css_file):
     if type(node) == Pane:
         html_file.write("</div>\n")
 
-def convert_txt(tree, text_file, depth):
+def convert_txt(tree, text_file):
     text = tree.print()
     text_file.write(text)
 
+def fold_dirs(dirs):
+    output_path = dirs[0]
+    for dir in dirs[1:]:
+        output_path += f"/{dir}"
+
+    return output_path
+
 def main():
     bcma_path = sys.argv[1]
+    root_path = os.path.dirname(sys.argv[0])
+    print(sys.argv[0])
 
-    buffer = None
-    with open(bcma_path, "rb") as file:
-        buffer = file.read()
+    # buffer = None
+    # with open(bcma_path, "rb") as file:
+    #     buffer = file.read()
     
-    layout_tree = parse_layout(buffer, 0x14)
+    # layout_tree = parse_layout(buffer, 0x14)
 
     # Get all files from the archive
 
@@ -328,30 +445,92 @@ def main():
     # Decompress all the files
 
 
-    # Convert the bclyt
-    with open("output/out.html", "w") as html_file, open("output/out.css", "w") as css_file:
-        css_file.write("body, div, p {\n")
-        css_file.write("    margin: 0;\n")
-        css_file.write("    padding: 0;\n")
-        css_file.write("}\n")
-
-        html_file.write("<!DOCTYPE html>\n")
-        html_file.write("<html>\n")
-        html_file.write("    <head>\n")
-        html_file.write("        <title>bcma2html test</title>\n")
-        html_file.write("        <meta charse=\"utf-8\">\n")
-        html_file.write("        <link rel=\"stylesheet\" href=\"out.css\">\n")
-        html_file.write("    </head>\n")
-        html_file.write("    <body>\n")
-
-        convert(layout_tree.root, html_file, css_file)
-
-        html_file.write("    </body>\n")
-        html_file.write("</html>\n")
+    # Get BcmaInfo
+    info_path = bcma_path + "/BcmaInfo/blyt/BcmaInfo.bclyt"
+    info_tree = None
+    with open(info_path, "rb") as file:
+        # 0x14 offset to skip header
+        info_tree = parse_layout(file.read(), 0x14)
     
-    with open("output/out.txt", "w", encoding="utf-8") as text_file:
-        convert_txt(layout_tree, text_file, 0)
+    # Get region/language info
+    region_info = info_tree.get_user_data("RegionInfo")
+    assert(region_info is not None)
+
+    languages = []    
+    for i in range(region_info.dict["RegionNum"][0]):
+        region_code = region_info.dict["Region_{:03}".format(i)]
+        language_info = info_tree.get_user_data(region_code)
+        assert(language_info is not None)
+
+        languages.append((region_code, []))
+        for j in range(language_info.dict["LangNum"][0]):
+            languages[-1][1].append(language_info.dict["Lang_{:03}".format(j)])
     
+    # TODO: Get TexRes stuff and load in all required archives beforehand
+
+
+    # Parse and convert each language
+    output_dirs = [f"{root_path}/output"]
+    for region in languages:
+        output_dirs.append(region[0])
+        for lang in region[1]:
+            output_dirs.append(lang)
+            
+            if not os.path.exists(fold_dirs(output_dirs)):
+                os.makedirs(fold_dirs(output_dirs))
+
+            print(lang)
+
+            # Get Index.bclyt
+            index_path = f"{bcma_path}/{region[0]}_{lang}_index/blyt/Index.bclyt"
+            index_tree = None
+            with open(index_path, "rb") as file:
+                index_tree = parse_layout(file.read(), 0x14)
+            
+            # Get metadata
+            metadata = index_tree.get_user_data("MetaData")
+            assert(metadata is not None)
+            print(metadata.dict)
+
+            # Get page titles
+            titles = []
+            for i in range(metadata.dict["PageNum"][0]):
+                page_title = index_tree.get_named_obj(f"PageTitle_{i:03}")
+                assert(page_title is not None)
+                titles.append(page_title.text)
+                
+            # Get categories
+            categories = []
+            for i in range(metadata.dict["CategoryNum"][0]):
+                category = index_tree.get_user_data(f"Category_{i:03}")
+                category_title = index_tree.get_named_obj(f"Category_{i:03}")
+                assert(category is not None)
+                assert(category_title is not None)
+                print(category_title.text)
+                print(category.dict)
+
+
+            # Convert each page (small ones for now)
+            for i, splits in enumerate(metadata.dict["SplitNumS"]):
+                page_path_part = f"{bcma_path}/{region[0]}_{lang}_small/blyt/Page_{i:03}_small"
+                page_trees = []
+
+                for split in range(splits):
+                    page_path = f"{page_path_part}_{split}.bclyt"
+                    with open(page_path, "rb") as file:
+                        page_trees.append(parse_layout(file.read(), 0x14))
+                
+
+                output_path = fold_dirs(output_dirs)
+                export(page_trees, f"{output_path}/Page_{i:03}")
+
+
+            output_dirs.pop()
+        output_dirs.pop()
+
+
+    
+
     print("Successfully Completed!")
 
 
