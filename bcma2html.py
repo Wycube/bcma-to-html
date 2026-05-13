@@ -1,4 +1,5 @@
 import struct, sys, os
+import archive
 
 
 class Canvas:
@@ -431,26 +432,16 @@ def fold_dirs(dirs):
 def main():
     bcma_path = sys.argv[1]
     root_path = os.path.dirname(sys.argv[0])
-    print(sys.argv[0])
 
-    # buffer = None
-    # with open(bcma_path, "rb") as file:
-    #     buffer = file.read()
-    
-    # layout_tree = parse_layout(buffer, 0x14)
-
-    # Get all files from the archive
-
-
-    # Decompress all the files
-
+    # Index the .bcma
+    bcma_darc = None
+    with open(bcma_path, "rb") as file:
+        bcma_darc = archive.DARC(file.read())
 
     # Get BcmaInfo
-    info_path = bcma_path + "/BcmaInfo/blyt/BcmaInfo.bclyt"
-    info_tree = None
-    with open(info_path, "rb") as file:
-        # 0x14 offset to skip header
-        info_tree = parse_layout(file.read(), 0x14)
+    info_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file("./BcmaInfo.arc")))
+    # 0x14 offset to skip header
+    info_tree = parse_layout(info_darc.get_file("./blyt/BcmaInfo.bclyt"), 0x14)
     
     # Get region/language info
     region_info = info_tree.get_user_data("RegionInfo")
@@ -482,10 +473,8 @@ def main():
             print(lang)
 
             # Get Index.bclyt
-            index_path = f"{bcma_path}/{region[0]}_{lang}_index/blyt/Index.bclyt"
-            index_tree = None
-            with open(index_path, "rb") as file:
-                index_tree = parse_layout(file.read(), 0x14)
+            index_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file(f"./{region[0]}_{lang}_index.arc")))
+            index_tree = parse_layout(index_darc.get_file("./blyt/Index.bclyt"), 0x14)
             
             # Get metadata
             metadata = index_tree.get_user_data("MetaData")
@@ -512,13 +501,12 @@ def main():
 
             # Convert each page (small ones for now)
             for i, splits in enumerate(metadata.dict["SplitNumS"]):
-                page_path_part = f"{bcma_path}/{region[0]}_{lang}_small/blyt/Page_{i:03}_small"
+                page_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file(f"./{region[0]}_{lang}_small.arc")))
                 page_trees = []
 
                 for split in range(splits):
-                    page_path = f"{page_path_part}_{split}.bclyt"
-                    with open(page_path, "rb") as file:
-                        page_trees.append(parse_layout(file.read(), 0x14))
+                    page_file = page_darc.get_file(f"./blyt/Page_{i:03}_small_{split}.bclyt")
+                    page_trees.append(parse_layout(page_file, 0x14))
                 
 
                 output_path = fold_dirs(output_dirs)
@@ -528,8 +516,6 @@ def main():
             output_dirs.pop()
         output_dirs.pop()
 
-
-    
 
     print("Successfully Completed!")
 
