@@ -470,8 +470,6 @@ def main():
             if not os.path.exists(fold_dirs(output_dirs)):
                 os.makedirs(fold_dirs(output_dirs))
 
-            print(lang)
-
             # Get Index.bclyt
             index_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file(f"./{region[0]}_{lang}_index.arc")))
             index_tree = parse_layout(index_darc.get_file("./blyt/Index.bclyt"), 0x14)
@@ -479,7 +477,6 @@ def main():
             # Get metadata
             metadata = index_tree.get_user_data("MetaData")
             assert(metadata is not None)
-            print(metadata.dict)
 
             # Get page titles
             titles = []
@@ -495,8 +492,6 @@ def main():
                 category_title = index_tree.get_named_obj(f"Category_{i:03}")
                 assert(category is not None)
                 assert(category_title is not None)
-                print(category_title.text)
-                print(category.dict)
 
 
             # Convert each page (small ones for now)

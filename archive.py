@@ -5,7 +5,7 @@ def decompress_lz10(compressed: bytes):
     # Check for header
     assert(compressed[0] == 0x10)
     # Next 24 bits of header is the decompressed size
-    size = compressed[1] | (compressed[2] << 8) | (compressed[3] << 16)
+    expected_size = compressed[1] | (compressed[2] << 8) | (compressed[3] << 16)
 
     compressed = compressed[4:]
     decompressed = bytearray()
@@ -37,9 +37,7 @@ def decompress_lz10(compressed: bytes):
                 decompressed.append(compressed[pointer])
                 pointer += 1
     
-    if len(decompressed) != size:
-        print("Size mismatch")
-        assert(False)
+    assert(len(decompressed) == expected_size)
 
     return decompressed
 
@@ -55,7 +53,6 @@ class DARC:
     def __init__(self, data: bytes):
         self.data = data
         self.endian, self.header = self.parse_header()
-        print("{:X}, {:X}, {:X}, {:X}, {:X}, {:X}".format(*self.header))
         self.file_tree = self.construct_file_tree()
     
     def parse_header(self):
@@ -76,7 +73,6 @@ class DARC:
         
         # Get the file/folder names
         self.assign_file_names(table_data[num_entries * 12:], file_tree)
-        print(file_tree)
 
         return file_tree
 
