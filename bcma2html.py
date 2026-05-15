@@ -1,5 +1,5 @@
 import struct, sys, os
-import archive
+import archive, texture
 
 
 class Canvas:
@@ -59,30 +59,30 @@ class Canvas:
         return str
 
 class TextureList:
-    def __init__(self):
-        pass
+    def __init__(self, textures):
+        self.textures = textures
 
     def print(self, level):
         str = " " * level
-        str += "TextureList\n"
+        str += f"TextureList({self.textures})\n"
         return str
 
 class FontList:
-    def __init__(self):
-        pass
+    def __init__(self, fonts):
+        self.fonts = fonts
 
     def print(self, level):
         str = " " * level
-        str += "FontList\n"
+        str += f"FontList({self.fonts})\n"
         return str
 
 class MaterialList:
-    def __init__(self):
-        pass
+    def __init__(self, materials):
+        self.materials = materials
 
     def print(self, level):
         str = " " * level
-        str += "MaterialList\n"
+        str += f"MaterialList({self.materials})\n"
         return str
 
 class Pane:
@@ -151,12 +151,15 @@ class Pane:
         return str
 
 class Picture:
-    def __init__(self):
-        pass
+    def __init__(self, pane_data, tex_data, tex_coords):
+        self.name = pane_data[4].decode("utf-8").strip('\0')
+        self.pane_data = pane_data
+        self.tex_data = tex_data
+        self.tex_coords = tex_coords
 
     def print(self, level):
         str = " " * level
-        str += "Picture\n"
+        str += f"Picture({self.name}, material({self.tex_data[16]}), tex_coords{self.tex_coords})\n"
         return str
 
 class Text:
@@ -186,7 +189,7 @@ class Text:
 
     def print(self, level):
         str = " " * level
-        str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), h_flags({}), v_flags({}), flags({}), padding({}), text:'{}')\n".format(self.name, self.translation, self.rotation, self.scale, self.size, self.font_scale, self.h_font_space, self.v_font_space, self.h_flags, self.v_flags, self.flags_2, self.padding_2, self.text)
+        str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), h_flags({}), v_flags({}), flags({}), material_id({}), padding({}), text:'{}')\n".format(self.name, self.translation, self.rotation, self.scale, self.size, self.font_scale, self.h_font_space, self.v_font_space, self.h_flags, self.v_flags, self.flags_2, self.material_id, self.padding_2, self.text)
         return str
 
 class Window:
@@ -268,13 +271,49 @@ def parse_lyt1(buffer, offset):
     return LayoutTree(Canvas(layout_data[0], layout_data[1:]))
 
 def parse_txl1(buffer, offset):
-    return TextureList()
+    num_textures = struct.unpack("<I", buffer[offset + 8:offset + 12])[0]
+    name_offsets = struct.unpack(f"<{num_textures}I", buffer[offset + 12:offset + 12 + 4 * num_textures])
+    start_pos = offset + 12
+    textures = []
+
+    for name_offset in name_offsets:
+        term_pos = buffer.find(b'\x00', start_pos + name_offset)
+        name = buffer[start_pos + name_offset:term_pos].decode()
+        textures.append(name)
+
+    return TextureList(textures)
 
 def parse_fnl1(buffer, offset):
-    return FontList()
+    num_fonts = struct.unpack("<I", buffer[offset + 8:offset + 12])[0]
+    name_offsets = struct.unpack(f"<{num_fonts}I", buffer[offset + 12:offset + 12 + 4 * num_fonts])
+    start_pos = offset + 12
+    fonts = []
+
+    for name_offset in name_offsets:
+        term_pos = buffer.find(b'\x00', start_pos + name_offset)
+        name = buffer[start_pos + name_offset:term_pos].decode()
+        fonts.append(name)
+
+    return FontList(fonts)
 
 def parse_mat1(buffer, offset):
-    return MaterialList()
+    num_entries = struct.unpack("<I", buffer[offset + 8:offset + 12])[0]
+    entry_offsets = struct.unpack(f"<{num_entries}I", buffer[offset + 12:offset + 12 + 4 * num_entries])
+    materials = []
+
+    for entry_offset in entry_offsets:
+        material = struct.unpack("<20s4B24BI", buffer[offset + entry_offset:offset + entry_offset + 0x34])
+        name = material[0].decode().strip('\0')
+        
+        num_tex_maps = material[29] & 3
+        tex_maps = []
+        for i in range(num_tex_maps):
+            tex_maps.append(struct.unpack("<HBB", buffer[offset + entry_offset + 0x34 + 4 * i:offset + entry_offset + 0x34 + 4 * (i + 1)]))
+        
+        
+        materials.append(name)
+
+    return MaterialList(materials)
 
 def parse_pan1(buffer, offset):
     layout_data = struct.unpack("<bbbb16s8s3f3f2f2f", buffer[offset + 8:offset + 0x4C])
@@ -282,7 +321,15 @@ def parse_pan1(buffer, offset):
     return Pane(*layout_data[:6], layout_data[6:9], layout_data[9:12], layout_data[12:14], layout_data[14:])
 
 def parse_pic1(buffer, offset):
-    return Picture()
+    pane_data = struct.unpack("<bbbb16s8s3f3f2f2f", buffer[offset + 8:offset + 0x4C])
+    tex_data = struct.unpack("<4B4B4B4BHH", buffer[offset + 0x4C:offset + 0x60])
+    tex_coords = []
+
+    for i in range(tex_data[17]):
+        coord_data = struct.unpack("<2f2f2f2f", buffer[offset + 0x60 + 0x20 * i:offset + 0x60 + 0x20 * (i + 1)])
+        tex_coords.append(coord_data)
+
+    return Picture(pane_data, tex_data, tex_coords)
 
 def parse_txt1(buffer, offset):
     pane_data = struct.unpack("<bbbb16s8s3f3f2f2f", buffer[offset + 8:offset + 0x4C])
@@ -382,8 +429,11 @@ def export(trees, path):
         html_file.write("    </body>\n")
         html_file.write("</html>\n")
     
-    with open(f"{path}.txt", "w", encoding="utf-8") as text_file:
-        convert_txt(tree, text_file)
+    split = 0
+    for tree in trees:
+        with open(f"{path}_{split:03}.txt", "w", encoding="utf-8") as text_file:
+            convert_txt(tree, text_file)
+        split += 1
 
 def convert(node, html_file, css_file):
     if type(node) == Pane:
