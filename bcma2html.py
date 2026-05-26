@@ -265,6 +265,13 @@ class LayoutTree:
     def get_named_obj(self, name):
         return self.root.get_named_obj(name)
 
+    def get_toplevel_node_of_type(self, type_name):
+        for child in self.root.children:
+            if type(child) is type_name:
+                return child
+        
+        return None
+
 def parse_lyt1(buffer, offset):
     layout_data = struct.unpack("<I2f", buffer[offset + 8:offset + 20])
 
@@ -303,15 +310,26 @@ def parse_mat1(buffer, offset):
 
     for entry_offset in entry_offsets:
         material = struct.unpack("<20s4B24BI", buffer[offset + entry_offset:offset + entry_offset + 0x34])
-        name = material[0].decode().strip('\0')
+        assert((material[29] >> 6) & 0x1F == 0)
         
         num_tex_maps = material[29] & 3
         tex_maps = []
         for i in range(num_tex_maps):
             tex_maps.append(struct.unpack("<HBB", buffer[offset + entry_offset + 0x34 + 4 * i:offset + entry_offset + 0x34 + 4 * (i + 1)]))
         
+        num_tex_mats = (material[29] >> 2) & 3
+        tex_mats = []
+        tex_mats_start = offset + entry_offset + 0x34 + 4 * num_tex_maps
+        for i in range(num_tex_mats):
+            tex_mats.append(struct.unpack("<2ff2f", buffer[tex_mats_start + 20 * i:tex_mats_start + 20 * (i + 1)]))
         
-        materials.append(name)
+        num_tex_coords = (material[29] >> 4) & 3
+        tex_coords = []
+        tex_coords_start = tex_mats_start + 20 * num_tex_mats
+        for i in range(num_tex_coords):
+            tex_coords.append(struct.unpack("<2bxx", buffer[tex_coords_start + 4 * i:tex_coords_start + 4 * (i + 1)]))
+        
+        materials.append((material, tex_maps, tex_mats, tex_coords))
 
     return MaterialList(materials)
 
@@ -406,7 +424,7 @@ def parse_layout(buffer, offset):
 
     return layout
 
-def export(trees, path):
+def export(trees, tex_archives, path):
     css_name = os.path.basename(path)
     with open(f"{path}.html", "w", encoding="utf-8") as html_file, open(f"{path}.css", "w", encoding="utf-8") as css_file:
         css_file.write("body, div, p {\n")
@@ -424,7 +442,7 @@ def export(trees, path):
         html_file.write("    <body>\n")
 
         for tree in trees:
-            convert(tree.root, html_file, css_file)
+            convert(tree, tex_archives, tree.root, path, html_file, css_file)
 
         html_file.write("    </body>\n")
         html_file.write("</html>\n")
@@ -435,7 +453,7 @@ def export(trees, path):
             convert_txt(tree, text_file)
         split += 1
 
-def convert(node, html_file, css_file):
+def convert(tree, tex_archives, node, path: str, html_file, css_file):
     if type(node) == Pane:
         html_file.write("<div class=\"{}\">\n".format(node.name))
 
@@ -449,7 +467,7 @@ def convert(node, html_file, css_file):
 
     if type(node) == Canvas or type(node) == Pane:
         for child in node.children:
-            convert(child, html_file, css_file)
+            convert(tree, tex_archives, child, path, html_file, css_file)
     elif type(node) == Text:
         try:
             html_file.write("<p class=\"{}\">{}</p>\n".format(node.name, node.text))
@@ -462,8 +480,35 @@ def convert(node, html_file, css_file):
         css_file.write("    top: {}px;\n".format(-node.translation[1]))
         css_file.write("    width: {}px;\n".format(node.size[0]))
         css_file.write("    height: {}px;\n".format(node.size[1]))
-        css_file.write("    font-size: {}px;\n".format(node.font_scale[1 ]))
+        css_file.write("    font-size: {}px;\n".format(node.font_scale[1]))
         css_file.write("}\n")
+    elif type(node) == Picture:
+        assert(node.tex_coords == [(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0)])
+        for col in node.tex_data[:16]:
+            assert(col == 255)
+        
+        mat_list = tree.get_toplevel_node_of_type(MaterialList)
+        tex_list = tree.get_toplevel_node_of_type(TextureList)
+        assert(mat_list is not None and tex_list is not None)
+        
+        mat_index = node.tex_data[16]
+        tex_index = mat_list.materials[mat_index][1][0][0]
+        tex_name: str = tex_list.textures[tex_index]
+
+        html_file.write("<img src=\"{}\" class=\"{}\">".format(tex_name.replace(".bclim", ".png"), node.name))
+
+        css_file.write(".{} {{\n".format(node.name))
+        css_file.write("    position: absolute;\n")
+        css_file.write("    left: {}px;\n".format(node.pane_data[6]))
+        css_file.write("    top: {}px;\n".format(-node.pane_data[7]))
+        css_file.write("    width: {}px;\n".format(node.pane_data[14]))
+        css_file.write("    height: {}px;\n".format(node.pane_data[15]))
+        css_file.write("}\n")
+
+        for darc in tex_archives:
+            if darc.has_file("./timg/" + tex_name):
+                bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
+                bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name.replace(".bclim", ".png"))
 
     if type(node) == Pane:
         html_file.write("</div>\n")
@@ -507,8 +552,20 @@ def main():
         for j in range(language_info.dict["LangNum"][0]):
             languages[-1][1].append(language_info.dict["Lang_{:03}".format(j)])
     
-    # TODO: Get TexRes stuff and load in all required archives beforehand
-
+    tex_arc_names = []
+    for i in range(len(languages)):
+        for j in range(len(languages[i][1])):
+            language_code = languages[i][0] + "_" + languages[i][1][j]
+            texres_info = info_tree.get_user_data(language_code)
+            for k in range(texres_info.dict["TexResNum"][0]):
+                archive_name = texres_info.dict["TexRes_{:04X}".format(k)]
+                if archive_name not in tex_arc_names:
+                    tex_arc_names.append(archive_name)
+    
+    tex_archives = []
+    for name in tex_arc_names:
+        tex_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file("./" + name)))
+        tex_archives.append(tex_darc)
 
     # Parse and convert each language
     output_dirs = [f"{root_path}/output"]
@@ -555,7 +612,7 @@ def main():
                 
 
                 output_path = fold_dirs(output_dirs)
-                export(page_trees, f"{output_path}/Page_{i:03}")
+                export(page_trees, tex_archives, f"{output_path}/Page_{i:03}")
 
 
             output_dirs.pop()
