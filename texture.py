@@ -82,8 +82,9 @@ class BCLIM:
             case 9: # RGBA8888
                 return [self.data[index * 4 + (3 - i)] for i in range(4)]
             case _: 
-                print(f"Unknown format: {self.header[9]}")
-                assert(False)
+                # print(f"Unknown format: {self.header[9]}")
+                # assert(False)
+                return [0, 0, 0, 0]
     
     def save_as_png(self, path):
         export = PIL.Image.new("RGBA", (self.header[7], self.header[8]))

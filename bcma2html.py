@@ -353,7 +353,7 @@ def parse_txt1(buffer, offset):
     pane_data = struct.unpack("<bbbb16s8s3f3f2f2f", buffer[offset + 8:offset + 0x4C])
     text_data = struct.unpack("<HHIHHIII2fff", buffer[offset + 0x4C:offset + 0x74])
     text_offset = text_data[5]
-    string = buffer[offset + text_offset:offset + struct.unpack("<I", buffer[offset + 4:offset + 8])[0]].decode("utf-16")
+    string = buffer[offset + text_offset:offset + struct.unpack("<I", buffer[offset + 4:offset + 8])[0]].decode("utf-16-le")
 
     return Text(*pane_data[:6], pane_data[6:9], pane_data[9:12], pane_data[12:14], pane_data[14:], *text_data[:5], *text_data[6:8], text_data[8:10], *text_data[10:], string)
 
@@ -436,10 +436,12 @@ def export(trees, tex_archives, path):
         html_file.write("<html>\n")
         html_file.write("    <head>\n")
         html_file.write("        <title>bcma2html test</title>\n")
-        html_file.write("        <meta charse=\"utf-8\">\n")
+        html_file.write("        <meta charset=\"utf-8\">\n")
         html_file.write(f"        <link rel=\"stylesheet\" href=\"{css_name}.css\">\n")
         html_file.write("    </head>\n")
         html_file.write("    <body>\n")
+
+        html_file.write("       <a href=\"../../Home.html\" style=\"position: absolute; left: {}px;\">Home</a>\n".format(trees[0].root.canvas_size[0]))
 
         for tree in trees:
             convert(tree, tex_archives, tree.root, path, html_file, css_file)
@@ -568,6 +570,7 @@ def main():
         tex_archives.append(tex_darc)
 
     # Parse and convert each language
+    page_num = {}
     output_dirs = [f"{root_path}/output"]
     for region in languages:
         output_dirs.append(region[0])
@@ -591,6 +594,7 @@ def main():
                 page_title = index_tree.get_named_obj(f"PageTitle_{i:03}")
                 assert(page_title is not None)
                 titles.append(page_title.text)
+                page_num[f"{region[0]}_{lang}"] = metadata.dict["PageNum"][0]
                 
             # Get categories
             categories = []
@@ -618,6 +622,25 @@ def main():
             output_dirs.pop()
         output_dirs.pop()
 
+    # Output a home page
+    with open(output_dirs[0] + "/Home.html", "w") as file:
+        file.write("<!DOCTYPE html>\n")
+        file.write("<html>\n")
+        file.write("    <head>\n")
+        file.write("        <title>bcma2html test</title>\n")
+        file.write("        <meta charset=\"utf-8\">\n")
+        # file.write(f"        <link rel=\"stylesheet\" href=\"{css_name}.css\">\n")
+        file.write("    </head>\n")
+        file.write("    <body>\n")
+
+        for region in languages:
+            for lang in region[1]:
+                file.write("        <p>{}_{}</p>".format(region[0], lang))
+                for i in range(page_num[f"{region[0]}_{lang}"]):
+                    file.write("        <a href=\"{}/{}/Page_{:03}.html\">Page {}</a><br>".format(region[0], lang, i, i))
+                file.write("        <br>")
+
+        file.write("    </body>\n")
 
     print("Successfully Completed!")
 
