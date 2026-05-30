@@ -424,7 +424,7 @@ def parse_layout(buffer, offset):
 
     return layout
 
-def export(trees, tex_archives, path):
+def export(trees, tex_archives, path, region_lang):
     css_name = os.path.basename(path)
     with open(f"{path}.html", "w", encoding="utf-8") as html_file, open(f"{path}.css", "w", encoding="utf-8") as css_file:
         css_file.write("body, div, p {\n")
@@ -441,7 +441,7 @@ def export(trees, tex_archives, path):
         html_file.write("    </head>\n")
         html_file.write("    <body>\n")
 
-        html_file.write("       <a href=\"../../Home.html\" style=\"position: absolute; left: {}px;\">Home</a>\n".format(trees[0].root.canvas_size[0]))
+        html_file.write("       <a href=\"../../Home_{}.html\" style=\"position: absolute; left: {}px;\">Home</a>\n".format(region_lang, trees[0].root.canvas_size[0]))
 
         for tree in trees:
             convert(tree, tex_archives, tree.root, path, html_file, css_file)
@@ -570,7 +570,7 @@ def main():
         tex_archives.append(tex_darc)
 
     # Parse and convert each language
-    category_html = ""
+    categories_html = {}
     page_num = {}
     output_dirs = [f"{root_path}/output"]
     for region in languages:
@@ -609,7 +609,7 @@ def main():
                 categories.append((category_title.text, category.dict["IsValid"][0] == 1, category_pages))
 
             # Make HTML for home page category links
-            category_html += "<p>{}_{}</p>".format(region[0], lang)
+            category_html = "<p>{}_{}</p>".format(region[0], lang)
             for category in categories:
                 if category[1]:
                     category_html += "<p>{}</p>".format(category[0])
@@ -617,6 +617,7 @@ def main():
                 for page in category[2]:
                     category_html += "<a href=\"{}/{}/Page_{:03}.html\">{}</a><br>".format(region[0], lang, page, titles[page])
             category_html += "<br>"
+            categories_html[f"{region[0]}_{lang}"] = category_html
 
             # Convert each page (small ones for now)
             for i, splits in enumerate(metadata.dict["SplitNumS"]):
@@ -629,26 +630,28 @@ def main():
                 
 
                 output_path = fold_dirs(output_dirs)
-                export(page_trees, tex_archives, f"{output_path}/Page_{i:03}")
+                export(page_trees, tex_archives, f"{output_path}/Page_{i:03}", f"{region[0]}_{lang}")
 
 
             output_dirs.pop()
         output_dirs.pop()
 
     # Output a home page
-    with open(output_dirs[0] + "/Home.html", "w", encoding="utf-8") as file:
-        file.write("<!DOCTYPE html>\n")
-        file.write("<html>\n")
-        file.write("    <head>\n")
-        file.write("        <title>bcma2html test</title>\n")
-        file.write("        <meta charset=\"utf-8\">\n")
-        # file.write(f"        <link rel=\"stylesheet\" href=\"{css_name}.css\">\n")
-        file.write("    </head>\n")
-        file.write("    <body>\n")
+    for region in languages:
+        for lang in region[1]:
+            with open(output_dirs[0] + f"/Home_{region[0]}_{lang}.html", "w", encoding="utf-8") as file:
+                file.write("<!DOCTYPE html>\n")
+                file.write("<html>\n")
+                file.write("    <head>\n")
+                file.write("        <title>bcma2html test</title>\n")
+                file.write("        <meta charset=\"utf-8\">\n")
+                # file.write(f"        <link rel=\"stylesheet\" href=\"{css_name}.css\">\n")
+                file.write("    </head>\n")
+                file.write("    <body>\n")
 
-        file.write(category_html)
+                file.write(categories_html[f"{region[0]}_{lang}"])
 
-        file.write("    </body>\n")
+                file.write("    </body>\n")
 
     print("Successfully Completed!")
 
