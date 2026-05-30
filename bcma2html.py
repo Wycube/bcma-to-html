@@ -208,7 +208,16 @@ class Window:
         return str
     
     def calc_sizes(self):
-        pass
+        content_box = [0, self.pane_data[14], 0, self.pane_data[15]]
+
+        # frames = self.wind_data[4]
+        # match frames:
+        #     case 1:
+
+        #     case 4:
+        #         pass
+        #     case 8:
+        #         pass
 
 class Bounding:
     def __init__(self):
@@ -557,7 +566,7 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
         css_file.write("    top: {}px;\n".format(-node.pane_data[7]))
         css_file.write("    width: {}px;\n".format(node.pane_data[14]))
         css_file.write("    height: {}px;\n".format(node.pane_data[15]))
-        css_file.write("    background-color: #{:08X};\n".format(((node.cont_data[0] & 0xFFFFFF) << 8) | (node.cont_data[0] >> 24)))
+        css_file.write("    background-color: #{:08X};\n".format(struct.unpack("<I", struct.pack(">I", node.cont_data[0]))[0]))
         css_file.write("}\n")
 
         if len(tex_index) == 1:
