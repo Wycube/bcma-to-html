@@ -193,13 +193,22 @@ class Text:
         return str
 
 class Window:
-    def __init__(self):
-        pass
+    def __init__(self, pane_data, wind_data, cont_data, tex_coords, frames):
+        self.name = pane_data[4].decode("utf-8").strip('\0')
+        self.pane_data = pane_data
+        self.wind_data = wind_data
+        self.cont_data = cont_data
+        self.tex_coords = tex_coords
+        self.frames = frames
+        self.calc_sizes()
 
     def print(self, level):
         str = " " * level
-        str += "Window\n"
+        str += f"Window({self.name}, {self.wind_data}, {self.cont_data}, {self.tex_coords}, {self.frames})\n"
         return str
+    
+    def calc_sizes(self):
+        pass
 
 class Bounding:
     def __init__(self):
@@ -358,9 +367,32 @@ def parse_txt1(buffer, offset):
     return Text(*pane_data[:6], pane_data[6:9], pane_data[9:12], pane_data[12:14], pane_data[14:], *text_data[:5], *text_data[6:8], text_data[8:10], *text_data[10:], string)
 
 def parse_wnd1(buffer, offset):
-    return Window()
+    pane_data = struct.unpack("<bbbb16s8s3f3f2f2f", buffer[offset + 8:offset + 0x4C])
+    wind_data = struct.unpack("<4f2b2x2I", buffer[offset + 0x4C:offset + 0x68])
+    assert(wind_data[4] in (1, 4, 8))
+
+    # Content Pane stuff
+    cont_data = struct.unpack("4I2H", buffer[offset + wind_data[6]:offset + wind_data[6] + 0x14])
+    start = offset + wind_data[6] + 0x14
+    tex_coords = []
+
+    for i in range(cont_data[5]):
+        coord_data = struct.unpack("<2f2f2f2f", buffer[start + 0x20 * i:start + 0x20 * (i + 1)])
+        tex_coords.append(coord_data)
+    
+    # Frames stuff
+    start = offset + wind_data[7]
+    frames = []
+
+    for i in range(wind_data[4]):
+        frame_offset = struct.unpack("<I", buffer[start + 4 * i:start + 4 * (i + 1)])[0]
+        frame_data = struct.unpack("<Hbx", buffer[offset + frame_offset:offset + frame_offset + 4])
+        frames.append(frame_data)
+
+    return Window(pane_data, wind_data, cont_data, tex_coords, frames)
 
 def parse_bnd1(buffer, offset):
+    assert(False)
     return Bounding()
 
 def parse_grp1(buffer, offset):
@@ -511,6 +543,45 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
             if darc.has_file("./timg/" + tex_name):
                 bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
                 bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name.replace(".bclim", ".png"))
+    elif type(node) == Window:
+        mat_list = tree.get_toplevel_node_of_type(MaterialList)
+        tex_list = tree.get_toplevel_node_of_type(TextureList)
+        assert(mat_list is not None)
+        
+        mat_index = node.cont_data[4]
+        tex_index = mat_list.materials[mat_index][1]
+
+        css_file.write(".{} {{\n".format(node.name))
+        css_file.write("    position: absolute;\n")
+        css_file.write("    left: {}px;\n".format(node.pane_data[6]))
+        css_file.write("    top: {}px;\n".format(-node.pane_data[7]))
+        css_file.write("    width: {}px;\n".format(node.pane_data[14]))
+        css_file.write("    height: {}px;\n".format(node.pane_data[15]))
+        css_file.write("    background-color: #{:08X};\n".format(((node.cont_data[0] & 0xFFFFFF) << 8) | (node.cont_data[0] >> 24)))
+        css_file.write("}\n")
+
+        if len(tex_index) == 1:
+            assert(tex_list is not None)
+            tex_name: str = tex_list.textures[tex_index[0][0]]
+            html_file.write("<img src=\"{}\" class=\"{}\">".format(tex_name.replace(".bclim", ".png"), node.name))
+            for darc in tex_archives:
+                if darc.has_file("./timg/" + tex_name):
+                    bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
+                    bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name.replace(".bclim", ".png"))
+        else:
+            html_file.write("<div class=\"{}\"></div>".format(node.name))
+        
+        for frame in node.frames:
+            mat_index = frame[0]
+            tex_index = mat_list.materials[mat_index][1]
+            if len(tex_index) == 1:
+                assert(tex_list is not None)
+                tex_name: str = tex_list.textures[tex_index[0][0]]
+                html_file.write("<img src=\"{}\">".format(tex_name.replace(".bclim", ".png")))
+                for darc in tex_archives:
+                    if darc.has_file("./timg/" + tex_name):
+                        bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
+                        bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name.replace(".bclim", ".png"))
 
     if type(node) == Pane:
         html_file.write("</div>\n")
