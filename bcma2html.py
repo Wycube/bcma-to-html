@@ -636,7 +636,7 @@ def main():
             output_dirs.pop()
         output_dirs.pop()
 
-    # Output a home page
+    # Output home pages
     for region in languages:
         for lang in region[1]:
             with open(output_dirs[0] + f"/Home_{region[0]}_{lang}.html", "w", encoding="utf-8") as file:
@@ -650,6 +650,12 @@ def main():
                 file.write("    <body>\n")
 
                 file.write(categories_html[f"{region[0]}_{lang}"])
+                
+                file.write("<div style=\"position: absolute; right: 0; top: 0;\">")
+                for region in languages:
+                    for lang in region[1]:
+                        file.write("        <a href=\"Home_{0}_{1}.html\">{0}_{1}</a>".format(region[0], lang))
+                file.write("</div>")
 
                 file.write("    </body>\n")
 
