@@ -570,6 +570,7 @@ def main():
         tex_archives.append(tex_darc)
 
     # Parse and convert each language
+    category_html = ""
     page_num = {}
     output_dirs = [f"{root_path}/output"]
     for region in languages:
@@ -601,9 +602,21 @@ def main():
             for i in range(metadata.dict["CategoryNum"][0]):
                 category = index_tree.get_user_data(f"Category_{i:03}")
                 category_title = index_tree.get_named_obj(f"Category_{i:03}")
-                assert(category is not None)
-                assert(category_title is not None)
+                category_pages = []
+                for j in range(category.dict["CategoryPageNum"][0]):
+                    category_pages.append(category.dict[f"PageID_{j:03}"][0])
 
+                categories.append((category_title.text, category.dict["IsValid"][0] == 1, category_pages))
+
+            # Make HTML for home page category links
+            category_html += "<p>{}_{}</p>".format(region[0], lang)
+            for category in categories:
+                if category[1]:
+                    category_html += "<p>{}</p>".format(category[0])
+                
+                for page in category[2]:
+                    category_html += "<a href=\"{}/{}/Page_{:03}.html\">{}</a><br>".format(region[0], lang, page, titles[page])
+            category_html += "<br>"
 
             # Convert each page (small ones for now)
             for i, splits in enumerate(metadata.dict["SplitNumS"]):
@@ -623,7 +636,7 @@ def main():
         output_dirs.pop()
 
     # Output a home page
-    with open(output_dirs[0] + "/Home.html", "w") as file:
+    with open(output_dirs[0] + "/Home.html", "w", encoding="utf-8") as file:
         file.write("<!DOCTYPE html>\n")
         file.write("<html>\n")
         file.write("    <head>\n")
@@ -633,12 +646,7 @@ def main():
         file.write("    </head>\n")
         file.write("    <body>\n")
 
-        for region in languages:
-            for lang in region[1]:
-                file.write("        <p>{}_{}</p>".format(region[0], lang))
-                for i in range(page_num[f"{region[0]}_{lang}"]):
-                    file.write("        <a href=\"{}/{}/Page_{:03}.html\">Page {}</a><br>".format(region[0], lang, i, i))
-                file.write("        <br>")
+        file.write(category_html)
 
         file.write("    </body>\n")
 
