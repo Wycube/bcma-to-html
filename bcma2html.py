@@ -619,6 +619,7 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
         css_file.write("    width: {}px;\n".format(node.size[0]))
         css_file.write("    height: {}px;\n".format(node.size[1]))
         css_file.write("    font-size: {}px;\n".format(node.font_scale[1]))
+        css_file.write("    color: #{:08X};\n".format(struct.unpack("<I", struct.pack(">I", node.top_color))[0]))
         css_file.write("}\n")
     elif type(node) == Picture:
         assert(node.tex_coords == [(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0)])
