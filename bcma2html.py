@@ -236,7 +236,10 @@ class Window:
                 for darc in archive_list:
                     if darc.has_file("./timg/" + tex_name):
                         bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
-                        corners.append((bclim, False, False))
+                        
+                        # TODO: Handle all flip types
+                        assert(frame[1] in (0, 1, 2, 4))
+                        corners.append((bclim, frame[1] in (1, 4), frame[1] in (2, 4)))
 
         self.border_image_size = (0, 0)
         self.border_image = None
@@ -655,10 +658,10 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
         node.load_texture_sizes(mat_list, tex_list, tex_archives)
         css_file.write(".{} {{\n".format(node.name))
         css_file.write("    position: absolute;\n")
-        css_file.write("    left: {}px;\n".format(node.pane_data[6] + node.content_box[0]))
-        css_file.write("    top: {}px;\n".format(-node.pane_data[7] + node.content_box[2]))
-        css_file.write("    width: {}px;\n".format(node.content_box[1] - node.content_box[0])) #node.pane_data[14]))
-        css_file.write("    height: {}px;\n".format(node.content_box[3] - node.content_box[2])) #node.pane_data[15]))
+        css_file.write("    left: {}px;\n".format(node.pane_data[6]))
+        css_file.write("    top: {}px;\n".format(-node.pane_data[7]))
+        css_file.write("    width: {}px;\n".format(node.content_box[1] - node.content_box[0]))
+        css_file.write("    height: {}px;\n".format(node.content_box[3] - node.content_box[2]))
         css_file.write("    background-color: #{:08X};\n".format(struct.unpack("<I", struct.pack(">I", node.cont_data[0]))[0]))
 
         if node.border_image is not None:
@@ -669,8 +672,8 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
             css_file.write("    border-bottom-width: {}px;\n".format(node.pane_data[15] - node.content_box[3]))
             css_file.write("    border-image: url(\"{}\");\n".format(path[path.rfind('/') + 1:] + "_" + node.name + ".png"))
             css_file.write("    border-image-slice: {} {} {} {};\n".format(node.content_box[2], node.content_box[0], node.pane_data[15] - node.content_box[3], node.pane_data[14] - node.content_box[1]))
-            css_file.write("    border-image-outset: {}px {}px {}px {}px;\n".format(node.content_box[2], node.content_box[0], node.pane_data[15] - node.content_box[3], node.pane_data[14] - node.content_box[1]))
-
+            css_file.write("    box-sizing: content-box;")
+            css_file.write("    background-clip: padding-box;")
         
         css_file.write("}\n")
 
@@ -684,18 +687,6 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
                     bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name.replace(".bclim", ".png"))
         else:
             html_file.write("<div class=\"{}\"></div>".format(node.name))
-        
-        # for frame in node.frames:
-        #     mat_index = frame[0]
-        #     tex_index = mat_list.materials[mat_index][1]
-        #     if len(tex_index) == 1:
-        #         assert(tex_list is not None)
-        #         tex_name: str = tex_list.textures[tex_index[0][0]]
-        #         html_file.write("<img src=\"{}\">".format(tex_name.replace(".bclim", ".png")))
-        #         for darc in tex_archives:
-        #             if darc.has_file("./timg/" + tex_name):
-        #                 bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
-        #                 bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name.replace(".bclim", ".png"))
 
         if node.border_image is not None:
             export = PIL.Image.new("RGBA", node.border_image_size)
