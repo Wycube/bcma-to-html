@@ -1,5 +1,6 @@
 import struct, sys, os
 import archive, texture
+import PIL.Image
 
 
 class Canvas:
@@ -200,24 +201,114 @@ class Window:
         self.cont_data = cont_data
         self.tex_coords = tex_coords
         self.frames = frames
-        self.calc_sizes()
 
     def print(self, level):
         str = " " * level
         str += f"Window({self.name}, {self.wind_data}, {self.cont_data}, {self.tex_coords}, {self.frames})\n"
         return str
     
+    def load_texture_sizes(self, mat_list, tex_list, archive_list):
+        self.frame_sizes = []
+
+        for frame in self.frames:
+            material_id = frame[0]
+            material = mat_list.materials[material_id]
+            if len(material[1]) != 0:
+                tex_name = tex_list.textures[material[1][0][0]]
+                for darc in archive_list:
+                    if darc.has_file("./timg/" + tex_name):
+                        bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
+                        self.frame_sizes.append((bclim.header[7], bclim.header[8]))
+            else:
+                self.frame_sizes.append((0, 0))
+        
+        # TODO: Add assert that sides' and corners' dimensions match
+        assert(len(self.frames) != 8)
+        self.calc_sizes()
+
+        # Construct nine-section image for border
+        corners = []
+        for frame in self.frames:
+            material_id = frame[0]
+            material = mat_list.materials[material_id]
+            if len(material[1]) != 0:
+                tex_name = tex_list.textures[material[1][0][0]]
+                for darc in archive_list:
+                    if darc.has_file("./timg/" + tex_name):
+                        bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
+                        corners.append((bclim, False, False))
+
+        self.border_image_size = (0, 0)
+        self.border_image = None
+
+        if len(corners) == 0:
+            return
+        elif len(corners) == 1:
+            corners.append((corners[0][0], True, False))
+            corners.append((corners[0][0], False, True))
+            corners.append((corners[0][0], True, True))
+
+        # Make sure corner dimensions match
+        # TODO: Figure out what happens if they don't
+        assert(corners[0][0].header[7] == corners[2][0].header[7])
+        assert(corners[1][0].header[7] == corners[3][0].header[7])
+        assert(corners[0][0].header[8] == corners[1][0].header[8])
+        assert(corners[2][0].header[8] == corners[3][0].header[8])
+        self.border_image_size = (corners[0][0].header[7] + 1 + corners[1][0].header[7], corners[2][0].header[8] + 1 + corners[1][0].header[8])
+        self.border_image = [0 for _ in range(self.border_image_size[0] * self.border_image_size[1] * 4)]
+
+        for i, corner in enumerate(corners):
+            # Copy image to specific spot
+            start_x = 0 if i % 2 == 0 else corners[0][0].header[7] + 1
+            start_y = 0 if i // 2 == 0 else corners[0][0].header[8] + 1
+
+
+            for x in range(corner[0].header[7]):
+                for y in range(corner[0].header[8]):
+                    src_x = (corner[0].header[7] - 1 - x) if corner[1] else x
+                    src_y = (corner[0].header[8] - 1 - y) if corner[2] else y
+                    self.border_image[(start_x + x + (start_y + y) * self.border_image_size[0]) * 4 + 0] = corner[0].image[(src_x + src_y * corner[0].header[7]) * 4 + 0]
+                    self.border_image[(start_x + x + (start_y + y) * self.border_image_size[0]) * 4 + 1] = corner[0].image[(src_x + src_y * corner[0].header[7]) * 4 + 1]
+                    self.border_image[(start_x + x + (start_y + y) * self.border_image_size[0]) * 4 + 2] = corner[0].image[(src_x + src_y * corner[0].header[7]) * 4 + 2]
+                    self.border_image[(start_x + x + (start_y + y) * self.border_image_size[0]) * 4 + 3] = corner[0].image[(src_x + src_y * corner[0].header[7]) * 4 + 3]
+
+            # Copy last edge to next row/column for sides
+            start_x1 = [corners[0][0].header[7] - 1, corners[0][0].header[7] + 1, 0, corners[0][0].header[7] + 1][i]
+            start_x2 = [corners[0][0].header[7], corners[0][0].header[7] + 1, 0, corners[0][0].header[7]][i]
+            start_y1 = [0, corners[0][0].header[8] - 1, corners[0][0].header[8] + 1, corners[0][0].header[8] + 1][i]
+            start_y2 = [0, corners[0][0].header[8], corners[0][0].header[8], corners[0][0].header[8] + 1][i]
+            direction = [(0, 1), (1, 0), (1, 0), (0, 1)][i]
+            size = [corners[0][0].header[8], corners[0][0].header[7], corners[0][0].header[7], corners[0][0].header[8]][i]
+
+            for i in range(size):
+                x1 = start_x1 + direction[0] * i
+                y1 = start_y1 + direction[1] * i
+                x2 = start_x2 + direction[0] * i
+                y2 = start_y2 + direction[1] * i
+                self.border_image[(x2 + y2 * self.border_image_size[0]) * 4 + 0] = self.border_image[(x1 + y1 * self.border_image_size[0]) * 4 + 0]
+                self.border_image[(x2 + y2 * self.border_image_size[0]) * 4 + 1] = self.border_image[(x1 + y1 * self.border_image_size[0]) * 4 + 1]
+                self.border_image[(x2 + y2 * self.border_image_size[0]) * 4 + 2] = self.border_image[(x1 + y1 * self.border_image_size[0]) * 4 + 2]
+                self.border_image[(x2 + y2 * self.border_image_size[0]) * 4 + 3] = self.border_image[(x1 + y1 * self.border_image_size[0]) * 4 + 3]
+
+
     def calc_sizes(self):
-        content_box = [0, self.pane_data[14], 0, self.pane_data[15]]
+        self.content_box = [0, self.pane_data[14], 0, self.pane_data[15]]
 
-        # frames = self.wind_data[4]
-        # match frames:
-        #     case 1:
-
-        #     case 4:
-        #         pass
-        #     case 8:
-        #         pass
+        frames = self.wind_data[4]
+        match frames:
+            case 1:
+                self.content_box[0] += self.frame_sizes[0][0]
+                self.content_box[1] -= self.frame_sizes[0][0]
+                self.content_box[2] += self.frame_sizes[0][1]
+                self.content_box[3] -= self.frame_sizes[0][1]
+            case 4:
+                # Assuming widths and heights of aligned corners are the same
+                self.content_box[0] += self.frame_sizes[0][0]
+                self.content_box[1] -= self.frame_sizes[1][0]
+                self.content_box[2] += self.frame_sizes[0][1]
+                self.content_box[3] -= self.frame_sizes[2][1]
+            case 8:
+                pass
 
 class Bounding:
     def __init__(self):
@@ -471,6 +562,7 @@ def export(trees, tex_archives, path, region_lang):
         css_file.write("body, div, p {\n")
         css_file.write("    margin: 0;\n")
         css_file.write("    padding: 0;\n")
+        css_file.write("    box-sizing: border-box;\n")
         css_file.write("}\n")
 
         html_file.write("<!DOCTYPE html>\n")
@@ -560,13 +652,26 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
         mat_index = node.cont_data[4]
         tex_index = mat_list.materials[mat_index][1]
 
+        node.load_texture_sizes(mat_list, tex_list, tex_archives)
         css_file.write(".{} {{\n".format(node.name))
         css_file.write("    position: absolute;\n")
-        css_file.write("    left: {}px;\n".format(node.pane_data[6]))
-        css_file.write("    top: {}px;\n".format(-node.pane_data[7]))
-        css_file.write("    width: {}px;\n".format(node.pane_data[14]))
-        css_file.write("    height: {}px;\n".format(node.pane_data[15]))
+        css_file.write("    left: {}px;\n".format(node.pane_data[6] + node.content_box[0]))
+        css_file.write("    top: {}px;\n".format(-node.pane_data[7] + node.content_box[2]))
+        css_file.write("    width: {}px;\n".format(node.content_box[1] - node.content_box[0])) #node.pane_data[14]))
+        css_file.write("    height: {}px;\n".format(node.content_box[3] - node.content_box[2])) #node.pane_data[15]))
         css_file.write("    background-color: #{:08X};\n".format(struct.unpack("<I", struct.pack(">I", node.cont_data[0]))[0]))
+
+        if node.border_image is not None:
+            css_file.write("    border: solid transparent;")
+            css_file.write("    border-left-width: {}px;\n".format(node.content_box[0]))
+            css_file.write("    border-right-width: {}px;\n".format(node.pane_data[14] - node.content_box[1]))
+            css_file.write("    border-top-width: {}px;\n".format(node.content_box[2]))
+            css_file.write("    border-bottom-width: {}px;\n".format(node.pane_data[15] - node.content_box[3]))
+            css_file.write("    border-image: url(\"{}\");\n".format(path[path.rfind('/') + 1:] + "_" + node.name + ".png"))
+            css_file.write("    border-image-slice: {} {} {} {};\n".format(node.content_box[2], node.content_box[0], node.pane_data[15] - node.content_box[3], node.pane_data[14] - node.content_box[1]))
+            css_file.write("    border-image-outset: {}px {}px {}px {}px;\n".format(node.content_box[2], node.content_box[0], node.pane_data[15] - node.content_box[3], node.pane_data[14] - node.content_box[1]))
+
+        
         css_file.write("}\n")
 
         if len(tex_index) == 1:
@@ -580,17 +685,22 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
         else:
             html_file.write("<div class=\"{}\"></div>".format(node.name))
         
-        for frame in node.frames:
-            mat_index = frame[0]
-            tex_index = mat_list.materials[mat_index][1]
-            if len(tex_index) == 1:
-                assert(tex_list is not None)
-                tex_name: str = tex_list.textures[tex_index[0][0]]
-                html_file.write("<img src=\"{}\">".format(tex_name.replace(".bclim", ".png")))
-                for darc in tex_archives:
-                    if darc.has_file("./timg/" + tex_name):
-                        bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
-                        bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name.replace(".bclim", ".png"))
+        # for frame in node.frames:
+        #     mat_index = frame[0]
+        #     tex_index = mat_list.materials[mat_index][1]
+        #     if len(tex_index) == 1:
+        #         assert(tex_list is not None)
+        #         tex_name: str = tex_list.textures[tex_index[0][0]]
+        #         html_file.write("<img src=\"{}\">".format(tex_name.replace(".bclim", ".png")))
+        #         for darc in tex_archives:
+        #             if darc.has_file("./timg/" + tex_name):
+        #                 bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
+        #                 bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name.replace(".bclim", ".png"))
+
+        if node.border_image is not None:
+            export = PIL.Image.new("RGBA", node.border_image_size)
+            export.frombytes(bytes(node.border_image))
+            export.save(path + "_" + node.name + ".png", format="png")
 
     if type(node) == Pane:
         html_file.write("</div>\n")
