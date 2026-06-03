@@ -2,6 +2,100 @@ import struct, math
 import PIL.Image
 
 
+ETC1_MOD_TABLE = (
+    ( 2,   8,  -2,   -8),
+    ( 5,  17,  -5,  -17),
+    ( 9,  29,  -9,  -29),
+    (13,  42, -13,  -42),
+    (18,  60, -18,  -60),
+    (24,  80, -24,  -80),
+    (33, 106, -33, -106),
+    (47, 183, -48, -183)
+)
+
+def decode_etc1_tile(word: int):
+    diff_bit = (word >> 33) & 1 == 1
+    flip_bit = (word >> 32) & 1 == 1
+    index_bits = []
+    for i in range(16):
+        index_bits.append(((word >> i) & 1) | ((word >> (15 + i)) & 2))
+
+    table_code_1 = (word >> 37) & 7
+    table_code_2 = (word >> 34) & 7
+    base_color_1 = None
+    base_color_2 = None
+    if diff_bit:
+        base_r = (word >> 59) & 0x1f
+        base_g = (word >> 51) & 0x1f
+        base_b = (word >> 43) & 0x1f
+
+        # 3-bit two's complement
+        delta_r = base_r + ((word >> 58) & 1) * -4 + ((word >> 56) & 3)
+        delta_g = base_g + ((word >> 50) & 1) * -4 + ((word >> 48) & 3)
+        delta_b = base_b + ((word >> 42) & 1) * -4 + ((word >> 40) & 3)
+        assert delta_r < 32 and delta_r >= 0, "red overflowed/underflowod ({}, {})".format(base_r, delta_r)
+        assert delta_g < 32 and delta_g >= 0, "green overflowed/underflowed ({}, {})".format(base_g, delta_g)
+        assert delta_b < 32 and delta_b >= 0, "blue overflowed/underflowed ({}, {})".format(base_b, delta_b)
+
+        base_color_1 = ((base_r << 3) | (base_r >> 2), (base_g << 3) | (base_g >> 2), (base_b << 3) | (base_b >> 2))
+        base_color_2 = ((delta_r << 3) | (delta_r >> 2), (delta_g << 3) | (delta_g >> 2), (delta_b << 3) | (delta_b >> 2))
+    else:
+        base_r_1 = (word >> 60) & 0xf
+        base_g_1 = (word >> 52) & 0xf
+        base_b_1 = (word >> 44) & 0xf
+        base_r_2 = (word >> 56) & 0xf
+        base_g_2 = (word >> 48) & 0xf
+        base_b_2 = (word >> 40) & 0xf
+        base_color_1 = ((base_r_1 << 4) | base_r_1, (base_g_1 << 4) | base_g_1, (base_b_1 << 4) | base_b_1)
+        base_color_2 = ((base_r_2 << 4) | base_r_2, (base_g_2 << 4) | base_g_2, (base_b_2 << 4) | base_b_2)
+    
+    tile = bytearray(4 * 4 * 4)
+    for i in range(16):
+        x = i // 4
+        y = i % 4
+        color = base_color_1 if (x < 2 and not flip_bit) or (y < 2 and flip_bit) else base_color_2
+        table = table_code_1 if (x < 2 and not flip_bit) or (y < 2 and flip_bit) else table_code_2
+        mod_table = ETC1_MOD_TABLE[table]
+        index = index_bits[i]
+        tile[i * 4 + 0] = min(255, max(0, color[0] + mod_table[index]))
+        tile[i * 4 + 1] = min(255, max(0, color[1] + mod_table[index]))
+        tile[i * 4 + 2] = min(255, max(0, color[2] + mod_table[index]))
+        tile[i * 4 + 3] = 255
+    
+    return tile
+
+def copy_tile(buffer, start, width, tile):
+    for i in range(16):
+        tile_x = i // 4
+        tile_y = i % 4
+        offset = start + (tile_x + tile_y * width * 4) * 4
+        buffer[offset + 0] = tile[i * 4 + 0]
+        buffer[offset + 1] = tile[i * 4 + 1]
+        buffer[offset + 2] = tile[i * 4 + 2]
+        buffer[offset + 3] = tile[i * 4 + 3]
+
+def decode_etc1(data: bytes, tiles: tuple[int, int]):
+    # Loop through all tiles and decode
+    decoded = bytearray(tiles[0] * tiles[1] * 16 * 4)
+    for y in range(tiles[1] // 2):
+        for x in range(tiles[0] // 2):
+            y2 = y * 2
+            x2 = x * 4
+            tile_0 = decode_etc1_tile(struct.unpack("<Q", data[(x2 + 0 + y2 * tiles[0]) * 8:(x2 + 0 + y2 * tiles[0]) * 8 + 8])[0])
+            tile_1 = decode_etc1_tile(struct.unpack("<Q", data[(x2 + 1 + y2 * tiles[0]) * 8:(x2 + 1 + y2 * tiles[0]) * 8 + 8])[0])
+            tile_2 = decode_etc1_tile(struct.unpack("<Q", data[(x2 + 2 + y2 * tiles[0]) * 8:(x2 + 2 + y2 * tiles[0]) * 8 + 8])[0])
+            tile_3 = decode_etc1_tile(struct.unpack("<Q", data[(x2 + 3 + y2 * tiles[0]) * 8:(x2 + 3 + y2 * tiles[0]) * 8 + 8])[0])
+            start_0 = ((x * 2 + 0) * 4 + (y2 + 0) * 4 * tiles[0] * 4) * 4
+            start_1 = ((x * 2 + 1) * 4 + (y2 + 0) * 4 * tiles[0] * 4) * 4
+            start_2 = ((x * 2 + 0) * 4 + (y2 + 1) * 4 * tiles[0] * 4) * 4
+            start_3 = ((x * 2 + 1) * 4 + (y2 + 1) * 4 * tiles[0] * 4) * 4
+            copy_tile(decoded, start_0, tiles[0], tile_0)
+            copy_tile(decoded, start_1, tiles[0], tile_1)
+            copy_tile(decoded, start_2, tiles[0], tile_2)
+            copy_tile(decoded, start_3, tiles[0], tile_3)
+    
+    return decoded
+
 class BCLIM:
     def __init__(self, data: bytes):
         self.data = data
@@ -26,13 +120,25 @@ class BCLIM:
     
     def parse_image(self):
         assert(self.header[1] == 2 and self.header[2] == 2)
-
-        # TODO: Add etc1 decoding (formats 10 and 11)
+        # assert(self.header[9] in (2, 6, 7, 8, 9, 10), "Unknown format {}!".format(self.header[9]))
 
         # Round the dimensions to the next power of two then divide by 8 to get the number of tiles
         rounded_w = 1 << int(math.ceil(math.log2(self.header[7]))) >> 3
         rounded_h = 1 << int(math.ceil(math.log2(self.header[8]))) >> 3
         image = bytearray(self.header[7] * self.header[8] * 4)
+        
+        # TODO: Add etc1 decoding (formats 10 and 11)
+        # assert(self.header[9] != 11)
+        if self.header[9] == 10:
+            etc1 = decode_etc1(self.data, (rounded_w << 1, rounded_h << 1))
+            for x in range(self.header[7]):
+                for y in range(self.header[8]):
+                    image[(x + y * self.header[7]) * 4 + 0] = etc1[(x + y * self.header[7]) * 4 + 0]
+                    image[(x + y * self.header[7]) * 4 + 1] = etc1[(x + y * self.header[7]) * 4 + 1]
+                    image[(x + y * self.header[7]) * 4 + 2] = etc1[(x + y * self.header[7]) * 4 + 2]
+                    image[(x + y * self.header[7]) * 4 + 3] = etc1[(x + y * self.header[7]) * 4 + 3]
+            
+            return image
 
         for i in range(rounded_w * rounded_h * 64):
             tile_pos = i % 64
@@ -81,9 +187,7 @@ class BCLIM:
                 return [((pixel >> (3 - i) * 4) & 0xF) * 17 for i in range(4)]
             case 9: # RGBA8888
                 return [self.data[index * 4 + (3 - i)] for i in range(4)]
-            case _: 
-                # print(f"Unknown format: {self.header[9]}")
-                # assert(False)
+            case _:
                 return [0, 0, 0, 0]
     
     def save_as_png(self, path):

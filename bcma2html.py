@@ -676,18 +676,17 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
             css_file.write("    box-sizing: content-box;")
             css_file.write("    background-clip: padding-box;")
         
-        css_file.write("}\n")
-
         if len(tex_index) == 1:
             assert(tex_list is not None)
             tex_name: str = tex_list.textures[tex_index[0][0]]
-            html_file.write("<img src=\"{}\" class=\"{}\">".format(tex_name.replace(".bclim", ".png"), node.name))
+            css_file.write("background-image: url(\"{}\");".format(tex_name.replace(".bclim", ".png")))
             for darc in tex_archives:
                 if darc.has_file("./timg/" + tex_name):
                     bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
                     bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name.replace(".bclim", ".png"))
-        else:
-            html_file.write("<div class=\"{}\"></div>".format(node.name))
+
+        css_file.write("}\n")
+        html_file.write("<div class=\"{}\"></div>".format(node.name))
 
         if node.border_image is not None:
             export = PIL.Image.new("RGBA", node.border_image_size)
@@ -711,6 +710,14 @@ def fold_dirs(dirs):
 def main():
     bcma_path = sys.argv[1]
     root_path = os.path.dirname(sys.argv[0])
+
+    # TEMP
+    # with open(bcma_path, "rb") as file:
+    #     tex = texture.BCLIM(file.read())
+    #     tex.save_as_png(root_path + "/output/test.png")
+    #     print(f"({tex.header[7]}, {tex.header[8]})")
+
+    # return
 
     # Index the .bcma
     bcma_darc = None
