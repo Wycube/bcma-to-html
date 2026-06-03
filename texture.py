@@ -25,9 +25,9 @@ def decode_etc1_tile(word: int, alphas: int):
     base_color_1 = None
     base_color_2 = None
     if diff_bit:
-        base_r = (word >> 59) & 0x1f
-        base_g = (word >> 51) & 0x1f
-        base_b = (word >> 43) & 0x1f
+        base_r = (word >> 59) & 0x1F
+        base_g = (word >> 51) & 0x1F
+        base_b = (word >> 43) & 0x1F
 
         # 3-bit two's complement
         delta_r = base_r + ((word >> 58) & 1) * -4 + ((word >> 56) & 3)
@@ -40,12 +40,12 @@ def decode_etc1_tile(word: int, alphas: int):
         base_color_1 = ((base_r << 3) | (base_r >> 2), (base_g << 3) | (base_g >> 2), (base_b << 3) | (base_b >> 2))
         base_color_2 = ((delta_r << 3) | (delta_r >> 2), (delta_g << 3) | (delta_g >> 2), (delta_b << 3) | (delta_b >> 2))
     else:
-        base_r_1 = (word >> 60) & 0xf
-        base_g_1 = (word >> 52) & 0xf
-        base_b_1 = (word >> 44) & 0xf
-        base_r_2 = (word >> 56) & 0xf
-        base_g_2 = (word >> 48) & 0xf
-        base_b_2 = (word >> 40) & 0xf
+        base_r_1 = (word >> 60) & 0xF
+        base_g_1 = (word >> 52) & 0xF
+        base_b_1 = (word >> 44) & 0xF
+        base_r_2 = (word >> 56) & 0xF
+        base_g_2 = (word >> 48) & 0xF
+        base_b_2 = (word >> 40) & 0xF
         base_color_1 = ((base_r_1 << 4) | base_r_1, (base_g_1 << 4) | base_g_1, (base_b_1 << 4) | base_b_1)
         base_color_2 = ((base_r_2 << 4) | base_r_2, (base_g_2 << 4) | base_g_2, (base_b_2 << 4) | base_b_2)
     
@@ -61,7 +61,7 @@ def decode_etc1_tile(word: int, alphas: int):
         tile[i * 4 + 1] = min(255, max(0, color[1] + mod_table[index]))
         tile[i * 4 + 2] = min(255, max(0, color[2] + mod_table[index]))
         
-        alpha = (alphas >> i * 4) & 0xf
+        alpha = (alphas >> i * 4) & 0xF
         tile[i * 4 + 3] = (alpha << 4) | alpha
     
     return tile
@@ -128,7 +128,7 @@ class BCLIM:
     
     def parse_image(self):
         assert self.header[1] == 2 and self.header[2] == 2
-        assert self.header[9] in (2, 3, 6, 7, 8, 9, 10, 11), "Unknown format {}!".format(self.header[9])
+        assert self.header[9] in (2, 3, 5, 6, 7, 8, 9, 10, 11), "Unknown format {}!".format(self.header[9])
 
         # Round the dimensions to the next power of two then divide by 8 to get the number of tiles
         rounded_w = 1 << int(math.ceil(math.log2(self.header[7]))) >> 3
@@ -185,6 +185,11 @@ class BCLIM:
                 alpha = self.data[index * 2 + 1]
                 rgba = [lum] * 3
                 rgba.append(alpha)
+                return rgba
+            case 5: # RGB565
+                pixel = self.data[index * 2] | (self.data[index * 2 + 1] << 8)
+                rgba = [int((pixel >> 11) * (255 / 31)), int(((pixel >> 5) & 0x3F) * (255 / 63)), int((pixel & 0x1F) * (255 / 31))]
+                rgba.append(255)
                 return rgba
             case 6: # RGB888
                 rgba = [self.data[index * 3 + (2 - i)] for i in range(3)]
