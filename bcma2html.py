@@ -622,7 +622,7 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
         css_file.write("    color: #{:08X};\n".format(struct.unpack("<I", struct.pack(">I", node.top_color))[0]))
         css_file.write("}\n")
     elif type(node) == Picture:
-        assert(node.tex_coords == [(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0)])
+        assert node.tex_coords == [(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0)], node.tex_coords
         for col in node.tex_data[:16]:
             assert(col == 255)
         
@@ -805,14 +805,16 @@ def main():
                 page_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file(f"./{region[0]}_{lang}_small.arc")))
                 page_trees = []
 
+                # Background
+                page_file = page_darc.get_file(f"./blyt/Page_{i:03}_small_bg.bclyt")
+                page_trees.append(parse_layout(page_file, 0x14))
+                
                 for split in range(splits):
                     page_file = page_darc.get_file(f"./blyt/Page_{i:03}_small_{split}.bclyt")
                     page_trees.append(parse_layout(page_file, 0x14))
                 
-
                 output_path = fold_dirs(output_dirs)
                 export(page_trees, tex_archives, f"{output_path}/Page_{i:03}", f"{region[0]}_{lang}")
-
 
             output_dirs.pop()
         output_dirs.pop()
