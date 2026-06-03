@@ -13,7 +13,7 @@ ETC1_MOD_TABLE = (
     (47, 183, -48, -183)
 )
 
-def decode_etc1_tile(word: int):
+def decode_etc1_tile(word: int, alphas: int):
     diff_bit = (word >> 33) & 1 == 1
     flip_bit = (word >> 32) & 1 == 1
     index_bits = []
@@ -60,7 +60,9 @@ def decode_etc1_tile(word: int):
         tile[i * 4 + 0] = min(255, max(0, color[0] + mod_table[index]))
         tile[i * 4 + 1] = min(255, max(0, color[1] + mod_table[index]))
         tile[i * 4 + 2] = min(255, max(0, color[2] + mod_table[index]))
-        tile[i * 4 + 3] = 255
+        
+        alpha = (alphas >> i * 4) & 0xf
+        tile[i * 4 + 3] = (alpha << 4) | alpha
     
     return tile
 
@@ -74,25 +76,31 @@ def copy_tile(buffer, start, width, tile):
         buffer[offset + 2] = tile[i * 4 + 2]
         buffer[offset + 3] = tile[i * 4 + 3]
 
-def decode_etc1(data: bytes, tiles: tuple[int, int]):
+def decode_etc1(data: bytes, tiles: tuple[int, int], alpha: bool = False):
     # Loop through all tiles and decode
-    decoded = bytearray(tiles[0] * tiles[1] * 16 * 4)
-    for y in range(tiles[1] // 2):
-        for x in range(tiles[0] // 2):
-            y2 = y * 2
-            x2 = x * 4
-            tile_0 = decode_etc1_tile(struct.unpack("<Q", data[(x2 + 0 + y2 * tiles[0]) * 8:(x2 + 0 + y2 * tiles[0]) * 8 + 8])[0])
-            tile_1 = decode_etc1_tile(struct.unpack("<Q", data[(x2 + 1 + y2 * tiles[0]) * 8:(x2 + 1 + y2 * tiles[0]) * 8 + 8])[0])
-            tile_2 = decode_etc1_tile(struct.unpack("<Q", data[(x2 + 2 + y2 * tiles[0]) * 8:(x2 + 2 + y2 * tiles[0]) * 8 + 8])[0])
-            tile_3 = decode_etc1_tile(struct.unpack("<Q", data[(x2 + 3 + y2 * tiles[0]) * 8:(x2 + 3 + y2 * tiles[0]) * 8 + 8])[0])
-            start_0 = ((x * 2 + 0) * 4 + (y2 + 0) * 4 * tiles[0] * 4) * 4
-            start_1 = ((x * 2 + 1) * 4 + (y2 + 0) * 4 * tiles[0] * 4) * 4
-            start_2 = ((x * 2 + 0) * 4 + (y2 + 1) * 4 * tiles[0] * 4) * 4
-            start_3 = ((x * 2 + 1) * 4 + (y2 + 1) * 4 * tiles[0] * 4) * 4
-            copy_tile(decoded, start_0, tiles[0], tile_0)
-            copy_tile(decoded, start_1, tiles[0], tile_1)
-            copy_tile(decoded, start_2, tiles[0], tile_2)
-            copy_tile(decoded, start_3, tiles[0], tile_3)
+    decoded = bytearray(tiles[0] * tiles[1] * 16 * 4)    
+    for i in range(tiles[0] * tiles[1]):
+        z_tile_pos = i % 4
+        z_tile_num = i // 4
+
+        # Deswizzle the morton tiling (4x4)
+        x = z_tile_pos & 1
+        y = z_tile_pos >> 1
+        x += z_tile_num % (tiles[0] // 2) * 2
+        y += z_tile_num // (tiles[0] // 2) * 2
+
+        tile_data = None
+        tile_alphas = None
+        if alpha:
+            tile_alphas, tile_data = struct.unpack("<QQ", data[i * 16:(i + 1) * 16])
+        else:
+            tile_alphas = ~0
+            tile_data = struct.unpack("<Q", data[i * 8:(i + 1) * 8])[0]
+
+
+        etc1_tile = decode_etc1_tile(tile_data, tile_alphas)
+        start = (x * 4 + y * 4 * tiles[0] * 4) * 4
+        copy_tile(decoded, start, tiles[0], etc1_tile)
     
     return decoded
 
@@ -106,37 +114,36 @@ class BCLIM:
         # Should be last 0x28 bytes
         header_data = self.data[-0x28:]
         
-        assert(header_data[:4] == b'CLIM')
+        assert header_data[:4] == b'CLIM'
         self.endian = '<' if header_data[4:6] == b'\xff\xfe' else '>'
 
         header_format = self.endian + "IBBII4sIHHII"
-        assert(struct.calcsize(header_format) == 0x22)
+        assert struct.calcsize(header_format) == 0x22
 
         header = struct.unpack(header_format, header_data[6:])
-        assert(header[5] == b'imag')
-        assert(header[4] == 1)
+        assert header[5] == b'imag'
+        assert header[4] == 1
 
         return header
     
     def parse_image(self):
-        assert(self.header[1] == 2 and self.header[2] == 2)
-        # assert(self.header[9] in (2, 6, 7, 8, 9, 10), "Unknown format {}!".format(self.header[9]))
+        assert self.header[1] == 2 and self.header[2] == 2
+        assert self.header[9] in (2, 3, 6, 7, 8, 9, 10, 11), "Unknown format {}!".format(self.header[9])
 
         # Round the dimensions to the next power of two then divide by 8 to get the number of tiles
         rounded_w = 1 << int(math.ceil(math.log2(self.header[7]))) >> 3
         rounded_h = 1 << int(math.ceil(math.log2(self.header[8]))) >> 3
         image = bytearray(self.header[7] * self.header[8] * 4)
         
-        # TODO: Add etc1 decoding (formats 10 and 11)
-        # assert(self.header[9] != 11)
-        if self.header[9] == 10:
-            etc1 = decode_etc1(self.data, (rounded_w << 1, rounded_h << 1))
+        # ETC1 and ETC1A4 decoding
+        if self.header[9] in (10, 11):
+            etc1 = decode_etc1(self.data, (rounded_w << 1, rounded_h << 1), self.header[9] == 11)
             for x in range(self.header[7]):
                 for y in range(self.header[8]):
-                    image[(x + y * self.header[7]) * 4 + 0] = etc1[(x + y * self.header[7]) * 4 + 0]
-                    image[(x + y * self.header[7]) * 4 + 1] = etc1[(x + y * self.header[7]) * 4 + 1]
-                    image[(x + y * self.header[7]) * 4 + 2] = etc1[(x + y * self.header[7]) * 4 + 2]
-                    image[(x + y * self.header[7]) * 4 + 3] = etc1[(x + y * self.header[7]) * 4 + 3]
+                    image[(x + y * self.header[7]) * 4 + 0] = etc1[(x + y * (rounded_w * 8)) * 4 + 0]
+                    image[(x + y * self.header[7]) * 4 + 1] = etc1[(x + y * (rounded_w * 8)) * 4 + 1]
+                    image[(x + y * self.header[7]) * 4 + 2] = etc1[(x + y * (rounded_w * 8)) * 4 + 2]
+                    image[(x + y * self.header[7]) * 4 + 3] = etc1[(x + y * (rounded_w * 8)) * 4 + 3]
             
             return image
 
@@ -168,10 +175,16 @@ class BCLIM:
 
     def decode_pixel(self, index):
         match self.header[9]:
-            case 2: # LA4
+            case 2: # LA44
                 pixel = self.data[index]
                 rgba = [(pixel >> 4) * 17] * 3
                 rgba.append((pixel & 0xF) * 17)
+                return rgba
+            case 3: # LA88
+                lum = self.data[index * 2]
+                alpha = self.data[index * 2 + 1]
+                rgba = [lum] * 3
+                rgba.append(alpha)
                 return rgba
             case 6: # RGB888
                 rgba = [self.data[index * 3 + (2 - i)] for i in range(3)]

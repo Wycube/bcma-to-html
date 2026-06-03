@@ -711,14 +711,6 @@ def main():
     bcma_path = sys.argv[1]
     root_path = os.path.dirname(sys.argv[0])
 
-    # TEMP
-    # with open(bcma_path, "rb") as file:
-    #     tex = texture.BCLIM(file.read())
-    #     tex.save_as_png(root_path + "/output/test.png")
-    #     print(f"({tex.header[7]}, {tex.header[8]})")
-
-    # return
-
     # Index the .bcma
     bcma_darc = None
     with open(bcma_path, "rb") as file:
