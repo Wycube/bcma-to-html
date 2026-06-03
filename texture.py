@@ -187,8 +187,8 @@ class BCLIM:
                 rgba.append((pixel & 0xF) * 17)
                 return rgba
             case 3: # LA88
-                lum = self.data[index * 2]
-                alpha = self.data[index * 2 + 1]
+                alpha = self.data[index * 2]
+                lum = self.data[index * 2 + 1]
                 rgba = [lum] * 3
                 rgba.append(alpha)
                 return rgba
