@@ -128,7 +128,7 @@ class BCLIM:
     
     def parse_image(self):
         assert self.header[1] == 2 and self.header[2] == 2
-        assert self.header[9] in (2, 3, 5, 6, 7, 8, 9, 10, 11), "Unknown format {}!".format(self.header[9])
+        assert self.header[9] in (0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11), "Unknown format {}!".format(self.header[9])
 
         # Round the dimensions to the next power of two then divide by 8 to get the number of tiles
         rounded_w = 1 << int(math.ceil(math.log2(self.header[7]))) >> 3
@@ -175,6 +175,12 @@ class BCLIM:
 
     def decode_pixel(self, index):
         match self.header[9]:
+            case 0: # L8
+                rgba = [self.data[index]] * 3
+                rgba.append(255)
+                return rgba
+            case 1: # A8
+                return [0, 0, 0, self.data[index]]
             case 2: # LA44
                 pixel = self.data[index]
                 rgba = [(pixel >> 4) * 17] * 3
