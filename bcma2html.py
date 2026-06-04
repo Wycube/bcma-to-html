@@ -568,6 +568,17 @@ def export(trees, tex_archives, path, region_lang):
         css_file.write("    box-sizing: border-box;\n")
         css_file.write("}\n")
 
+        css_file.write("body {\n")
+        css_file.write("    display: flex;\n")
+        css_file.write("    justify-content: center;\n")
+        css_file.write("}\n")
+
+        css_file.write(".manual {\n")
+        css_file.write("    position: relative;\n")
+        css_file.write("    width: {}px;\n".format(trees[0].root.canvas_size[0]))
+        css_file.write("    height: {}px;\n".format(trees[0].root.canvas_size[1]))
+        css_file.write("}\n")
+
         html_file.write("<!DOCTYPE html>\n")
         html_file.write("<html>\n")
         html_file.write("    <head>\n")
@@ -579,8 +590,10 @@ def export(trees, tex_archives, path, region_lang):
 
         html_file.write("       <a href=\"../../Home_{}.html\" style=\"position: absolute; left: {}px;\">Home</a>\n".format(region_lang, trees[0].root.canvas_size[0]))
 
+        html_file.write("       <div class=\"manual\">\n")
         for tree in trees:
             convert(tree, tex_archives, tree.root, path, html_file, css_file)
+        html_file.write("       </div>\n")
 
         html_file.write("    </body>\n")
         html_file.write("</html>\n")
@@ -709,7 +722,7 @@ def fold_dirs(dirs):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("manual", help="Path to the Manual.bcma file")
+    parser.add_argument("manual", help="Path to the BCMA file (usually Manual.bcma)")
     args = parser.parse_args()
 
     bcma_path = args.manual
