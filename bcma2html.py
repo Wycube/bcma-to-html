@@ -1,4 +1,4 @@
-import struct, sys, os
+import struct, sys, os, argparse
 import archive, texture
 import PIL.Image
 
@@ -628,7 +628,7 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
         
         mat_list = tree.get_toplevel_node_of_type(MaterialList)
         tex_list = tree.get_toplevel_node_of_type(TextureList)
-        assert(mat_list is not None and tex_list is not None)
+        assert mat_list is not None and tex_list is not None
         
         mat_index = node.tex_data[16]
         tex_index = mat_list.materials[mat_index][1][0][0]
@@ -651,7 +651,7 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
     elif type(node) == Window:
         mat_list = tree.get_toplevel_node_of_type(MaterialList)
         tex_list = tree.get_toplevel_node_of_type(TextureList)
-        assert(mat_list is not None)
+        assert mat_list is not None
         
         mat_index = node.cont_data[4]
         tex_index = mat_list.materials[mat_index][1]
@@ -677,7 +677,7 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
             css_file.write("    background-clip: padding-box;")
         
         if len(tex_index) == 1:
-            assert(tex_list is not None)
+            assert tex_list is not None
             tex_name: str = tex_list.textures[tex_index[0][0]]
             css_file.write("background-image: url(\"{}\");".format(tex_name.replace(".bclim", ".png")))
             for darc in tex_archives:
@@ -708,7 +708,11 @@ def fold_dirs(dirs):
     return output_path
 
 def main():
-    bcma_path = sys.argv[1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("manual", help="Path to the Manual.bcma file")
+    args = parser.parse_args()
+
+    bcma_path = args.manual
     root_path = os.path.dirname(sys.argv[0])
 
     # Index the .bcma
