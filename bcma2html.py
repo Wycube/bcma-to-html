@@ -3,14 +3,6 @@ import archive, texture, layout
 import PIL.Image
 
 
-def parse_layout(buffer, offset):
-    # layout = None
-    # while offset < len(buffer):
-    #     offset, layout = parse_layout_element(buffer, offset, layout)
-
-    # return layout
-    return layout.BCLYT(buffer).layout
-
 def export(trees, tex_archives, path, region_lang):
     css_name = os.path.basename(path)
     with open(f"{path}.html", "w", encoding="utf-8") as html_file, open(f"{path}.css", "w", encoding="utf-8") as css_file:
@@ -186,8 +178,8 @@ def main():
 
     # Get BcmaInfo
     info_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file("./BcmaInfo.arc")))
-    # 0x14 offset to skip header
-    info_tree = parse_layout(info_darc.get_file("./blyt/BcmaInfo.bclyt"), 0x14)
+    info_clyt = layout.BCLYT(info_darc.get_file("./blyt/BcmaInfo.bclyt"))
+    info_tree = info_clyt.layout
     
     # Get region/language info
     region_info = info_tree.get_user_data("RegionInfo")
@@ -232,8 +224,9 @@ def main():
 
             # Get Index.bclyt
             index_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file(f"./{region[0]}_{lang}_index.arc")))
-            index_tree = parse_layout(index_darc.get_file("./blyt/Index.bclyt"), 0x14)
-            
+            index_clyt = layout.BCLYT(index_darc.get_file("./blyt/Index.bclyt"))
+            index_tree = index_clyt.layout
+
             # Get metadata
             metadata = index_tree.get_user_data("MetaData")
             assert(metadata is not None)
@@ -275,11 +268,11 @@ def main():
 
                 # Background
                 page_file = page_darc.get_file(f"./blyt/Page_{i:03}_small_bg.bclyt")
-                page_trees.append(parse_layout(page_file, 0x14))
+                page_trees.append(layout.BCLYT(page_file).layout)
                 
                 for split in range(splits):
                     page_file = page_darc.get_file(f"./blyt/Page_{i:03}_small_{split}.bclyt")
-                    page_trees.append(parse_layout(page_file, 0x14))
+                    page_trees.append(layout.BCLYT(page_file).layout)
                 
                 output_path = fold_dirs(output_dirs)
                 export(page_trees, tex_archives, f"{output_path}/Page_{i:03}", f"{region[0]}_{lang}")
