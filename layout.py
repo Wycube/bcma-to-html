@@ -1,8 +1,10 @@
 import struct
 import texture
 
-# TODO: Parent (for nodes with children) and Named (for nodes with a name)
-# TODO: Add function for parsing pane data since most nodes use that
+
+class Named:
+    def __init__(self, name):
+        self.name = name
 
 class PaneData:
     def __init__(self, data):
@@ -98,16 +100,14 @@ class MaterialList:
         str += f"MaterialList({self.materials})\n"
         return str
 
-class Pane:
+class Pane(Named):
     def parse_pan1(data):
         return PaneData(data)
 
     def __init__(self, data):
         self.pane_data = Pane.parse_pan1(data)
         self.children = []
-
-    def add(self, element):
-        self.children.append(element)
+        super(Pane, self).__init__(self.pane_data.name)
 
     def get_user_data(self, name):
         # Look through all layers and find a pane/text matching the name.
@@ -150,14 +150,14 @@ class Pane:
 
     def print(self, level):
         str = " " * level
-        str += "Pane ({}, translation{}, rotation{}, scale{}, size{})\n".format(self.name, self.translation, self.rotation, self.scale, self.size)
+        str += "Pane ({}, translation{}, rotation{}, scale{}, size{})\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size)
 
         for child in self.children:
             str += child.print(level + 1)
 
         return str
 
-class Picture:
+class Picture(Named):
     def parse_pic1(data):
         tex_data = struct.unpack("<4B4B4B4BHH", data[0x4C:0x60])
         tex_coords = []
@@ -170,6 +170,7 @@ class Picture:
 
     def __init__(self, data):
         self.pane_data, self.tex_data, self.tex_coords = Picture.parse_pic1(data)
+        super(Picture, self).__init__(self.pane_data.name)
 
     def print(self, level):
         str = " " * level
@@ -177,7 +178,7 @@ class Picture:
         return str
 
 
-class Text:
+class Text(Named):
     def parse_txt1(data):
         text_data = struct.unpack("<HHHHH2xIII2fff", data[0x4C:0x74])
         text_start = text_data[5]
@@ -193,18 +194,19 @@ class Text:
         self.material_id = text_data[2]
         self.font_id = text_data[3]
         self.flags_2 = text_data[4]
-        self.top_color = text_data[5]
-        self.bottom_color = text_data[6]
-        self.font_scale = (text_data[7], text_data[8])
-        self.h_font_space = text_data[9]
-        self.v_font_space = text_data[10]
+        self.top_color = text_data[6]
+        self.bottom_color = text_data[7]
+        self.font_scale = (text_data[8], text_data[9])
+        self.h_font_space = text_data[10]
+        self.v_font_space = text_data[11]
+        super(Text, self).__init__(self.pane_data.name)
 
     def print(self, level):
         str = " " * level
-        str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), h_flags({}), v_flags({}), flags({}), material_id({}), padding({}), text:'{}')\n".format(self.name, self.translation, self.rotation, self.scale, self.size, self.font_scale, self.h_font_space, self.v_font_space, self.h_flags, self.v_flags, self.flags_2, self.material_id, self.padding_2, self.text)
+        str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), h_flags({}), v_flags({}), flags({}), material_id({}), text:'{}')\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size, self.font_scale, self.h_font_space, self.v_font_space, self.h_flags, self.v_flags, self.flags_2, self.material_id, self.text)
         return str
 
-class Window:
+class Window(Named):
     def parse_wnd1(data):
         wind_data = struct.unpack("<4f2b2x2I", data[0x4C:0x68])
         assert wind_data[4] in (1, 4, 8), f"Window frame count ({wind_data[4]}) not supported!"
@@ -231,6 +233,7 @@ class Window:
 
     def __init__(self, data):
         self.pane_data, self.wind_data, self.cont_data, self.tex_coords, self.frames = Window.parse_wnd1(data)
+        super(Window, self).__init__(self.pane_data.name)
 
     def print(self, level):
         str = " " * level
@@ -323,7 +326,7 @@ class Window:
 
 
     def calc_sizes(self):
-        self.content_box = [0, self.pane_data[14], 0, self.pane_data[15]]
+        self.content_box = [0, self.pane_data.size[0], 0, self.pane_data.size[1]]
 
         frames = self.wind_data[4]
         match frames:
@@ -350,7 +353,7 @@ class Bounding:
     def __init__(self, data):
         assert False, "Bounding element unimplemented!"
 
-class Group:
+class Group(Named):
     def parse_grp1(data):
         group_data = struct.unpack("<16sI", data[8:0x1C])
         refs = []
@@ -361,7 +364,8 @@ class Group:
         return group_data[0].decode("utf-8").strip('\0'), refs
 
     def __init__(self, data):
-        self.name, self.refs = Group.parse_grp1(data)
+        name, self.refs = Group.parse_grp1(data)
+        super(Group, self).__init__(name)
 
     def print(self, level):
         str = " " * level
@@ -408,7 +412,7 @@ class LayoutTree:
         self.origin_type = lyt1[1]
         self.canvas_size = (lyt1[2], lyt1[3])
 
-        self.child = []
+        self.children = []
         self.pane_stack = []
         self.last_pane = None
         self.parse_tree(data, lyt1[0])
@@ -420,20 +424,20 @@ class LayoutTree:
 
         match signature:
             case b'lyt1': assert False, "There should only be a lyt1 at the root!"
-            case b'txl1': self.add_element(TextureList(data[offset:]))
-            case b'fnl1': self.add_element(FontList(data[offset:]))
-            case b'mat1': self.add_element(MaterialList(data[offset:]))
-            case b'pan1': self.add_element(Pane(data[offset:]))
-            case b'pic1': self.add_element(Picture(data[offset:]))
-            case b'txt1': self.add_element(Text(data[offset:]))
-            case b'wnd1': self.add_element(Window(data[offset:]))
-            case b'bnd1': self.add_element(Bounding(data[offset:]))
+            case b'txl1': self.add_obj(TextureList(data[offset:]))
+            case b'fnl1': self.add_obj(FontList(data[offset:]))
+            case b'mat1': self.add_obj(MaterialList(data[offset:]))
+            case b'pan1': self.add_obj(Pane(data[offset:]))
+            case b'pic1': self.add_obj(Picture(data[offset:]))
+            case b'txt1': self.add_obj(Text(data[offset:]))
+            case b'wnd1': self.add_obj(Window(data[offset:]))
+            case b'bnd1': self.add_obj(Bounding(data[offset:]))
             case b'pas1': self.push_pane()
             case b'pae1': self.pop_pane()
-            case b'grp1': self.add_element(Group(data[offset:]))
+            case b'grp1': self.add_obj(Group(data[offset:]))
             case b'grs1': self.push_group()
             case b'gre1': self.pop_group()
-            case b'usd1': self.add_element(UserData(data[offset:]))
+            case b'usd1': self.add_obj(UserData(data[offset:]))
             case other: assert False, f"Unknown signature {other}!"
         
         return offset + section_size
@@ -442,11 +446,11 @@ class LayoutTree:
         while offset < len(data):
             offset = self.parse_layout_element(data, offset)
 
-    def add_element(self, element):
+    def add_obj(self, element):
         if len(self.pane_stack) == 0:
-            self.root.add(element)
+            self.children.append(element)
         else:
-            self.pane_stack[-1].add(element)
+            self.pane_stack[-1].children.append(element)
         
         if type(element) == Pane:
             self.last_pane = element
@@ -464,16 +468,52 @@ class LayoutTree:
         assert False, "Pop group unimplemented!"
 
     def print(self):
-        return self.root.print()
+        str = "Layout: ({}, {})\n".format(self.origin_type, self.canvas_size)
+
+        for child in self.children:
+            str += child.print(1)
+        
+        return str
     
     def get_user_data(self, name):
-        return self.root.get_user_data(name)
-    
-    def get_named_obj(self, name):
-        return self.root.get_named_obj(name)
+        # Look through all layers and find a pane/text matching the name.
+        # If there is a user data after it, return that.
+        check_next = False
+        for obj in self.children:
+            if check_next and isinstance(obj, UserData):
+                return obj
+            else:
+                check_next = False
 
-    def get_toplevel_node_of_type(self, type_name):
-        for child in self.root.children:
+            if isinstance(obj, Pane):
+                result = obj.get_user_data(name)
+                if result is not None:
+                    return result
+
+            if isinstance(obj, Named):
+                check_next = obj.name == name
+
+        return None
+
+    def get_named_obj(self, name):
+        # Look through all layers and find a pane/text/group matching the name.
+        for obj in self.children:
+            if not isinstance(obj, Named):
+                continue
+
+            if isinstance(obj, Pane) and obj.name != name:
+                result = obj.get_named_obj(name)
+                if result is not None:
+                    return result
+                continue
+
+            if obj.name == name:
+                return obj
+
+        return None
+
+    def get_toplevel_obj_of_type(self, type_name):
+        for child in self.children:
             if type(child) is type_name:
                 return child
         
