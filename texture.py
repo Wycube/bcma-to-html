@@ -13,7 +13,7 @@ ETC1_MOD_TABLE = (
     (47, 183, -48, -183)
 )
 
-def decode_etc1_tile(word: int, alphas: int):
+def _decode_etc1_tile(word: int, alphas: int):
     diff_bit = (word >> 33) & 1 == 1
     flip_bit = (word >> 32) & 1 == 1
     index_bits = []
@@ -66,7 +66,7 @@ def decode_etc1_tile(word: int, alphas: int):
     
     return tile
 
-def copy_tile(buffer, start, width, tile):
+def _copy_tile(buffer, start, width, tile):
     for i in range(16):
         tile_x = i // 4
         tile_y = i % 4
@@ -76,7 +76,7 @@ def copy_tile(buffer, start, width, tile):
         buffer[offset + 2] = tile[i * 4 + 2]
         buffer[offset + 3] = tile[i * 4 + 3]
 
-def decode_etc1(data: bytes, tiles: tuple[int, int], alpha: bool = False):
+def _decode_etc1(data: bytes, tiles: tuple[int, int], alpha: bool = False):
     # Loop through all tiles and decode
     decoded = bytearray(tiles[0] * tiles[1] * 16 * 4)    
     for i in range(tiles[0] * tiles[1]):
@@ -98,19 +98,19 @@ def decode_etc1(data: bytes, tiles: tuple[int, int], alpha: bool = False):
             tile_data = struct.unpack("<Q", data[i * 8:(i + 1) * 8])[0]
 
 
-        etc1_tile = decode_etc1_tile(tile_data, tile_alphas)
+        etc1_tile = _decode_etc1_tile(tile_data, tile_alphas)
         start = (x * 4 + y * 4 * tiles[0] * 4) * 4
-        copy_tile(decoded, start, tiles[0], etc1_tile)
+        _copy_tile(decoded, start, tiles[0], etc1_tile)
     
     return decoded
 
 class BCLIM:
     def __init__(self, data: bytes):
         self.data = data
-        self.header = self.parse_header()
-        self.image = self.parse_image()
+        self.header = self._parse_header()
+        self.image = self._parse_image()
 
-    def parse_header(self):
+    def _parse_header(self):
         # Should be last 0x28 bytes
         header_data = self.data[-0x28:]
         
@@ -126,7 +126,7 @@ class BCLIM:
 
         return header
     
-    def parse_image(self):
+    def _parse_image(self):
         assert self.header[1] == 2 and self.header[2] == 2
         assert self.header[9] in (0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11), "Unknown format {}!".format(self.header[9])
 
@@ -137,7 +137,7 @@ class BCLIM:
         
         # ETC1 and ETC1A4 decoding
         if self.header[9] in (10, 11):
-            etc1 = decode_etc1(self.data, (rounded_w << 1, rounded_h << 1), self.header[9] == 11)
+            etc1 = _decode_etc1(self.data, (rounded_w << 1, rounded_h << 1), self.header[9] == 11)
             for x in range(self.header[7]):
                 for y in range(self.header[8]):
                     image[(x + y * self.header[7]) * 4 + 0] = etc1[(x + y * (rounded_w * 8)) * 4 + 0]
@@ -165,7 +165,7 @@ class BCLIM:
             if x >= self.header[7] or y >= self.header[8]:
                 continue
 
-            pixel = self.decode_pixel(i)
+            pixel = self._decode_pixel(i)
             image[(x + y * self.header[7]) * 4 + 0] = pixel[0]
             image[(x + y * self.header[7]) * 4 + 1] = pixel[1]
             image[(x + y * self.header[7]) * 4 + 2] = pixel[2]
@@ -173,7 +173,7 @@ class BCLIM:
         
         return image
 
-    def decode_pixel(self, index):
+    def _decode_pixel(self, index):
         match self.header[9]:
             case 0: # L8
                 rgba = [self.data[index]] * 3

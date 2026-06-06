@@ -3,7 +3,7 @@ import struct
 
 def decompress_lz10(compressed: bytes):
     # Check for header
-    assert(compressed[0] == 0x10)
+    assert compressed[0] == 0x10, f"Bad header byte 0x{compressed:02X}!"
     # Next 24 bits of header is the decompressed size
     expected_size = compressed[1] | (compressed[2] << 8) | (compressed[3] << 16)
 
@@ -52,34 +52,34 @@ class DARC:
 
     def __init__(self, data: bytes):
         self.data = data
-        self.endian, self.header = self.parse_header()
-        self.file_tree = self.construct_file_tree()
+        self.endian, self.header = self._parse_header()
+        self.file_tree = self._build_file_tree()
     
-    def parse_header(self):
-        assert(self.data[:4] == b'darc')
+    def _parse_header(self):
+        assert self.data[:4] == b'darc', f"Bad header magic {self.data[:4]}!"
         endian = '<' if self.data[4:6] == b'\xff\xfe' else '>'
         header_format = endian + "HIIIII"
         format_size = struct.calcsize(header_format)
         
         return endian, struct.unpack(header_format, self.data[6:6 + format_size])
 
-    def construct_file_tree(self):
+    def _build_file_tree(self):
         table_start = self.header[self.FILE_TAB_OFF]
         table_length = self.header[self.FILE_TAB_LEN]
         table_data = self.data[table_start:table_start + table_length]
 
         # Build the tree structure
-        num_entries, file_tree = self.build_file_tree(table_data, 0)
+        num_entries, file_tree = self._build_file_tree_impl(table_data, 0)
         
         # Get the file/folder names
-        self.assign_file_names(table_data[num_entries * 12:], file_tree)
+        self._assign_file_names(table_data[num_entries * 12:], file_tree)
 
         return file_tree
 
-    def build_file_tree(self, table_data: bytes, index: int):
+    def _build_file_tree_impl(self, table_data: bytes, index: int):
         folder = []
         info = struct.unpack(self.endian + "III", table_data[index * 12:index * 12 + 12])
-        assert(info[0] & 0x01000000)
+        assert info[0] & 0x01000000, "_build_file_tree_impl called on file!"
 
         index += 1
         end_index = info[2]
@@ -88,7 +88,7 @@ class DARC:
 
             if next_info[0] & 0x01000000:
                 # Folder
-                index, child = self.build_file_tree(table_data, index)
+                index, child = self._build_file_tree_impl(table_data, index)
                 folder.append(child)
             else:
                 # File
@@ -97,7 +97,7 @@ class DARC:
 
         return index, [info[0] & 0xFFFFFF, folder]
 
-    def assign_file_names(self, name_data: bytes, file_tree: list[int, list]):
+    def _assign_file_names(self, name_data: bytes, file_tree: list[int, list]):
         offset = file_tree[0]
         term_index = name_data.find(b'\x00\x00', offset)
         name = name_data[offset:term_index + 1].decode("utf-16") if term_index != 0 else ""
@@ -106,7 +106,7 @@ class DARC:
         for node in file_tree[1]:
             if isinstance(node[1], list):
                 # Recurse on folder
-                self.assign_file_names(name_data, node)
+                self._assign_file_names(name_data, node)
             else:
                 # Get name for file
                 offset = node[0]
@@ -114,22 +114,22 @@ class DARC:
                 name = name_data[offset:term_index + 1].decode("utf-16")
                 node[0] = name
 
-    def has_file(self, name: str):
-        return self.find_file_impl(name, "", self.file_tree) is not None
-
-    def find_file_impl(self, name: str, pathname: str, folder: list[str, list]):
+    def _find_file_impl(self, name: str, pathname: str, folder: list[str, list]):
         for node in folder[1]:
             if isinstance(node[1], list):
-                result = self.find_file_impl(name, pathname + node[0] + "/", node)
+                result = self._find_file_impl(name, pathname + node[0] + "/", node)
                 if result is not None:
                     return result
             elif pathname + node[0] == name:
                 return node[1:]
 
         return None
+    
+    def has_file(self, name: str):
+        return self._find_file_impl(name, "", self.file_tree) is not None
 
     def get_file(self, name: str):
-        file_info = self.find_file_impl(name, "", self.file_tree)
+        file_info = self._find_file_impl(name, "", self.file_tree)
         if file_info is None:
             return None
         
