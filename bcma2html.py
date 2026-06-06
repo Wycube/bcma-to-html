@@ -29,6 +29,7 @@ def export(trees, tex_archives, path, region_lang):
         css_file.write("    position: relative;\n")
         css_file.write("    width: {}px;\n".format(trees[0].canvas_size[0]))
         css_file.write("    height: {}px;\n".format(trees[0].canvas_size[1]))
+        css_file.write("    white-space: preserve nowrap;\n")
         css_file.write("}\n")
 
         html_file.write("<!DOCTYPE html>\n")
