@@ -73,10 +73,7 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
         for child in node.children:
             convert(tree, tex_archives, child, path, html_file, css_file)
     elif type(node) == layout.Text:
-        try:
-            html_file.write("<p class=\"{}\">{}</p>\n".format(node.name, node.text))
-        except:
-            pass
+        html_file.write("<p class=\"{}\">{}</p>\n".format(node.name, node.text))
 
         css_file.write(".{} {{\n".format(node.name))
         css_file.write("    position: absolute;\n")
@@ -88,13 +85,13 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
         css_file.write("    color: #{:08X};\n".format(struct.unpack("<I", struct.pack(">I", node.top_color))[0]))
         css_file.write("}\n")
     elif type(node) == layout.Picture:
-        assert node.tex_coords == [(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0)], node.tex_coords
+        assert node.tex_coords == [(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0)], f"Texcoords other than default not handled yet! {node.tex_coords}"
         for col in node.tex_data[:16]:
-            assert(col == 255)
+            assert col == 255, "Vertex other than white not handled yet!"
         
         mat_list = tree.get_toplevel_obj_of_type(layout.MaterialList)
         tex_list = tree.get_toplevel_obj_of_type(layout.TextureList)
-        assert mat_list is not None and tex_list is not None
+        assert mat_list is not None and tex_list is not None, "Material list or texture list missing!"
         
         mat_index = node.tex_data[16]
         tex_index = mat_list.materials[mat_index][1][0][0]
@@ -117,7 +114,7 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
     elif type(node) == layout.Window:
         mat_list = tree.get_toplevel_obj_of_type(layout.MaterialList)
         tex_list = tree.get_toplevel_obj_of_type(layout.TextureList)
-        assert mat_list is not None
+        assert mat_list is not None, "Material list missing!"
         
         mat_index = node.cont_data[4]
         tex_index = mat_list.materials[mat_index][1]
@@ -143,7 +140,7 @@ def convert(tree, tex_archives, node, path: str, html_file, css_file):
             css_file.write("    background-clip: padding-box;")
         
         if len(tex_index) == 1:
-            assert tex_list is not None
+            assert tex_list is not None, "Texture list missing!"
             tex_name: str = tex_list.textures[tex_index[0][0]]
             css_file.write("background-image: url(\"{}\");".format(tex_name.replace(".bclim", ".png")))
             for darc in tex_archives:
