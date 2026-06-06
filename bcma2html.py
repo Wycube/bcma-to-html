@@ -3,6 +3,65 @@ import archive, texture, layout
 import PIL.Image
 
 
+class HTMLWriter:
+    def __init__(self, title, html_path, css_path):
+        self.title = title
+        self.html_path = html_path
+        self.css_path = css_path
+        self.body = ""
+        self.tabs = 2
+
+    def start_div(self, css_class=None):
+        if css_class is not None:
+            self.add_raw(f"<div class=\"{css_class}\"")
+        else:
+            self.add_raw("<div>")
+        self.tabs += 1
+
+    def end_div(self):
+        self.tabs -= 1
+        self.add_raw("</div>")
+
+    def add_raw(self, str):
+        self.body += "\t" * self.tabs
+        self.body += str
+        self.body += "\n"
+
+    def write(self):
+        with open(self.path, "w", encoding="utf-8") as file:
+            file.write("<!DOCTYPE html>\n")
+            file.write("<html>\n")
+            file.write("\t<head>\n")
+            file.write("\t\t<title>bcma2html test</title>\n")
+            file.write("\t\t<meta charset=\"utf-8\">\n")
+            
+            if self.css_path is not None:
+                file.write(f"\t\t<link rel=\"stylesheet\" href=\"{self.css_path}\">\n")
+
+            file.write("\t</head>\n")
+            file.write("\t<body>\n")
+            file.write(self.body)
+            file.write("\t</body>")
+
+class CSSWriter:
+    def __init__(self, path):
+        self.path = path
+        self.selectors = {}
+    
+    def add_property(self, class_name, name, value):
+        if self.selectors[class_name] is None:
+            self.selectors[class_name] = []
+        
+        self.selectors[class_name] += f"{name}: {value};"
+    
+    def write(self):
+        with open(self.path, "w", encoding="utf-8") as file:
+            for props in self.selectors.items():
+                file.write(f"{props[0]} {{\n")
+                for property in props[1]:
+                    file.write(f"\t{property}\n")
+                file.write("}")
+
 def export(trees, tex_archives, path, region_lang):
     css_name = os.path.basename(path)
     with open(f"{path}.html", "w", encoding="utf-8") as html_file, open(f"{path}.css", "w", encoding="utf-8") as css_file:
