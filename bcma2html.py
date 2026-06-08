@@ -63,6 +63,12 @@ class CSSWriter:
                 file.write("}")
 
 def export(trees, tex_archives, path, region_lang):
+    split = 0
+    for tree in trees:
+        with open(f"{path}_{split}.txt", "w", encoding="utf-8") as text_file:
+            convert_txt(tree, text_file)
+        split += 1
+
     css_name = os.path.basename(path)
     html = HTMLWriter("bcma2html test", path + ".html", css_name + ".css")
     css = CSSWriter(path + ".css")
@@ -90,12 +96,6 @@ def export(trees, tex_archives, path, region_lang):
 
     html.write()
     css.write()
-
-    split = 0
-    for tree in trees:
-        with open(f"{path}_{split:03}.txt", "w", encoding="utf-8") as text_file:
-            convert_txt(tree, text_file)
-        split += 1
 
 def convert(tree, tex_archives, node, path: str, html, css):
     if type(node) == layout.Pane:
@@ -246,18 +246,20 @@ def main():
 
             # Convert each page (small ones for now)
             for i in range(bcma.get_page_count(lang_str)):
-                page_trees = []
+                # page_trees = []
+                page_tree = None
 
                 # Background
                 page_file = bcma.get_page_bg(lang_str, i)
-                page_trees.append(page_file.layout)
+                # page_trees.append(page_file.layout)
+                page_tree = page_file.layout
                 
                 for split in range(bcma.get_page_splits(lang_str, i)):
                     page_file = bcma.get_page_split(lang_str, i, split)
-                    page_trees.append(page_file.layout)
+                    page_tree.merge(page_file.layout)
                 
                 output_path = fold_dirs(output_dirs)
-                export(page_trees, bcma.tex_archives, f"{output_path}/Page_{i:03}", lang_str)
+                export([page_tree], bcma.tex_archives, f"{output_path}/Page_{i:03}", lang_str)
 
             output_dirs.pop()
         output_dirs.pop()

@@ -39,6 +39,9 @@ class TextureList:
         str = " " * level
         str += f"TextureList({self.textures})\n"
         return str
+    
+    def offset_material_id(self, _):
+        pass
 
 class FontList:
     def parse_fnl1(data):
@@ -60,6 +63,9 @@ class FontList:
         str = " " * level
         str += f"FontList({self.fonts})\n"
         return str
+    
+    def offset_material_id(self, _):
+        pass
 
 class MaterialList:
     def parse_mat1(data):
@@ -99,6 +105,9 @@ class MaterialList:
         str = " " * level
         str += f"MaterialList({self.materials})\n"
         return str
+    
+    def offset_material_id(self, _):
+        pass
 
 class Pane(Named):
     def parse_pan1(data):
@@ -156,6 +165,10 @@ class Pane(Named):
             str += child.print(level + 1)
 
         return str
+    
+    def offset_material_id(self, offset):
+        for obj in self.children:
+            obj.offset_material_id(offset)
 
 class Picture(Named):
     def parse_pic1(data):
@@ -176,6 +189,10 @@ class Picture(Named):
         str = " " * level
         str += f"Picture({self.name}, material({self.tex_data[16]}), tex_coords{self.tex_coords})\n"
         return str
+    
+    def offset_material_id(self, offset):
+        # self.tex_data[16] += offset
+        self.tex_data = (*self.tex_data[:16], self.tex_data[16] + offset, *self.tex_data[16:])
 
 
 class Text(Named):
@@ -205,6 +222,9 @@ class Text(Named):
         str = " " * level
         str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), h_flags({}), v_flags({}), flags({}), material_id({}), text:'{}')\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size, self.font_scale, self.h_font_space, self.v_font_space, self.h_flags, self.v_flags, self.flags_2, self.material_id, self.text)
         return str
+    
+    def offset_material_id(self, offset):
+        self.material_id += offset
 
 class Window(Named):
     def parse_wnd1(data):
@@ -239,6 +259,13 @@ class Window(Named):
         str = " " * level
         str += f"Window({self.name}, {self.wind_data}, {self.cont_data}, {self.tex_coords}, {self.frames})\n"
         return str
+    
+    def offset_material_id(self, offset):
+        # self.cont_data[4] += offset
+        self.cont_data = (*self.cont_data[:4], self.cont_data[4] + offset, *self.cont_data[5:])
+        for i, frame in enumerate(self.frames):
+            # frame[0] += offset
+            self.frames[i] = (frame[0] + offset, *frame[1:])
     
     def load_texture_sizes(self, mat_list, tex_list, archive_list):
         self.frame_sizes = []
@@ -371,6 +398,9 @@ class Group(Named):
         str = " " * level
         str += "Group({}, {})\n".format(self.name, self.refs)
         return str
+    
+    def offset_material_id(self, _):
+        pass
 
 class UserData:
     def parse_usd1(data):
@@ -394,11 +424,15 @@ class UserData:
 
     def __init__(self, data):
         self.dict = UserData.parse_usd1(data)
+        print(self.dict)
 
     def print(self, level):
         str = " " * level
         str += "UserData({})\n".format(self.dict)
         return str
+    
+    def offset_material_id(self, _):
+        pass
 
 class LayoutTree:
     def parse_lyt1(data):
@@ -424,9 +458,15 @@ class LayoutTree:
 
         match signature:
             case b'lyt1': assert False, "There should only be a lyt1 at the root!"
-            case b'txl1': self.add_obj(TextureList(data[offset:]))
-            case b'fnl1': self.add_obj(FontList(data[offset:]))
-            case b'mat1': self.add_obj(MaterialList(data[offset:]))
+            case b'txl1': 
+                assert len(self.pane_stack) == 0 and self.last_pane is None, "Resources lists should be defined first in the layout!"
+                self.add_obj(TextureList(data[offset:]))
+            case b'fnl1': 
+                assert len(self.pane_stack) == 0 and self.last_pane is None, "Resources lists should be defined first in the layout!"
+                self.add_obj(FontList(data[offset:]))
+            case b'mat1': 
+                assert len(self.pane_stack) == 0 and self.last_pane is None, "Resources lists should be defined first in the layout!"
+                self.add_obj(MaterialList(data[offset:]))
             case b'pan1': self.add_obj(Pane(data[offset:]))
             case b'pic1': self.add_obj(Picture(data[offset:]))
             case b'txt1': self.add_obj(Text(data[offset:]))
@@ -518,6 +558,54 @@ class LayoutTree:
                 return child
         
         return None
+    
+    def _offset_material_indices(self, offset):
+        for obj in self.children:
+            obj.offset_material_id(offset)
+
+    def merge(self, other):
+        # Take maximum bounding box for size if sizes differ
+        new_size = self.canvas_size
+        if self.canvas_size != other.canvas_size:
+            new_size = (max(self.canvas_size[0], other.canvas_size[0]), max(self.canvas_size[1]), other.canvas_size[1])
+        self.canvas_size = new_size
+
+        # I've never seen any other fonts used so I'd be curious to see this fail
+        fonts_list_1 = self.get_toplevel_obj_of_type(FontList)
+        fonts_list_2 = other.get_toplevel_obj_of_type(FontList)
+        if fonts_list_1 is not None and fonts_list_2 is not None:
+            assert fonts_list_1.fonts == fonts_list_2.fonts == ["cbf_std.bcfnt"]
+        elif fonts_list_2 is not None:
+            self.children.insert(0, fonts_list_2)
+        
+        # Update texture indices in the other layout's material list
+        tex_list_1 = self.get_toplevel_obj_of_type(TextureList)
+        tex_list_2 = other.get_toplevel_obj_of_type(TextureList)
+        if tex_list_1 is not None and tex_list_2 is not None:
+            size = len(tex_list_1.textures)
+            mat_list = other.get_toplevel_obj_of_type(MaterialList)
+            for material in mat_list.materials:
+                for i, tex_map in enumerate(material[1]):
+                    material[1][i] = (tex_map[0] + size, tex_map[1], tex_map[2])
+            
+            tex_list_1.textures.extend(tex_list_2.textures)
+        elif tex_list_2 is not None:
+            self.children.insert(0, tex_list_2)
+
+        # Update material indices in the other layout's elements
+        mat_list_1 = self.get_toplevel_obj_of_type(MaterialList)
+        mat_list_2 = other.get_toplevel_obj_of_type(MaterialList)
+        if mat_list_1 is not None and mat_list_2 is not None:
+            size = len(mat_list_1.materials)
+            other._offset_material_indices(size)
+            mat_list_1.materials.extend(mat_list_2.materials)
+        elif mat_list_2 is not None:
+            self.children.insert(0, mat_list_2)
+
+        # Add children from other layout sans the resource lists
+        for child in other.children:
+            if not (isinstance(child, TextureList) or isinstance(child, FontList) or isinstance(child, MaterialList)):
+                self.children.append(child)
 
 class BCLYT:
     def parse_header(data):
