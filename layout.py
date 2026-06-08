@@ -424,7 +424,6 @@ class UserData:
 
     def __init__(self, data):
         self.dict = UserData.parse_usd1(data)
-        print(self.dict)
 
     def print(self, level):
         str = " " * level

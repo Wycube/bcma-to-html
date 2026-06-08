@@ -1,0 +1,93 @@
+body {
+    display: flex;
+    justify-content: center;
+}
+
+.index {
+    background-color: white;
+    padding: 1em;
+    box-sizing: border-box;
+    width: 18em;
+    font-size: 1.5em;
+    font-family: sans-serif;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.category {
+    padding: 0.3em;
+    color: white;
+    text-align: center;
+    border-radius: 6px;
+}
+
+.page {
+    display: block;
+    text-decoration: none;
+    color: black;
+    padding: 0.3em 0.4em;
+    margin-top: 0.5em;
+    border: #7FDE46 solid 3px;
+    border-radius: 6px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.icon {
+    display: inline-block;
+    padding: 0.4em 0;
+    margin-right: 0.5em;
+    text-align: center;
+    border-radius: 6px;
+    color: white;
+    width: 2em;
+}
+
+.category-block:nth-child(12n+1) .icon, .category-block:nth-child(12n+1) .category {
+    background-color: #ED8888
+}
+
+.category-block:nth-child(12n+2) .icon, .category-block:nth-child(12n+2) .category {
+    background-color: #9AD469
+}
+
+.category-block:nth-child(12n+3) .icon, .category-block:nth-child(12n+3) .category {
+    background-color: #75B7D9
+}
+
+.category-block:nth-child(12n+4) .icon, .category-block:nth-child(12n+4) .category {
+    background-color: #E2CA5B
+}
+
+.category-block:nth-child(12n+5) .icon, .category-block:nth-child(12n+5) .category {
+    background-color: #9C8BD6
+}
+
+.category-block:nth-child(12n+6) .icon, .category-block:nth-child(12n+6) .category {
+    background-color: #B0BD65
+}
+
+.category-block:nth-child(12n+7) .icon, .category-block:nth-child(12n+7) .category {
+    background-color: #CCADAD
+}
+
+.category-block:nth-child(12n+8) .icon, .category-block:nth-child(12n+8) .category {
+    background-color: #95ABED
+}
+
+.category-block:nth-child(12n+9) .icon, .category-block:nth-child(12n+9) .category {
+    background-color: #E99570
+}
+
+.category-block:nth-child(12n+10) .icon, .category-block:nth-child(12n+10) .category {
+    background-color: #79CEB3
+}
+
+.category-block:nth-child(12n+11) .icon, .category-block:nth-child(12n+11) .category {
+    background-color: black
+}
+
+.category-block:nth-child(12n+12) .icon, .category-block:nth-child(12n+12) .category {
+    background-color: black
+}

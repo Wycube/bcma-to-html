@@ -234,14 +234,15 @@ def main():
                 os.makedirs(fold_dirs(output_dirs))
 
             # Make HTML for home page category links
-            category_html = f"<p>{lang_str}</p>"
+            category_html = ""
             for category in bcma.get_categories(f"{region[0]}_{lang}"):
+                category_html += "<div class=\"category-block\">"
                 if category[1]:
-                    category_html += "<p>{}</p>".format(category[0])
+                    category_html += "<p class=\"category\">{}</p>".format(category[0])
                 
                 for page in category[2]:
-                    category_html += "<a href=\"{}/{}/Page_{:03}.html\">{}</a><br>".format(region[0], lang, page, bcma.get_page_title(lang_str, page))
-            category_html += "<br>"
+                    category_html += "<a class=\"page\" href=\"{}/{}/Page_{:03}.html\"><div class=\"icon\">{}</div>{}</a>".format(region[0], lang, page, 1 + page, bcma.get_page_title(lang_str, page))
+                category_html += "</div>"
             categories_html[lang_str] = category_html
 
             # Convert each page (small ones for now)
@@ -274,11 +275,13 @@ def main():
                 file.write("    <head>\n")
                 file.write("        <title>bcma2html test</title>\n")
                 file.write("        <meta charset=\"utf-8\">\n")
-                # file.write(f"        <link rel=\"stylesheet\" href=\"{css_name}.css\">\n")
+                file.write("        <link rel=\"stylesheet\" href=\"../home_page.css\">\n")
                 file.write("    </head>\n")
                 file.write("    <body>\n")
 
+                file.write("        <div class=\"index\">\n")
                 file.write(categories_html[lang_str])
+                file.write("        </div>\n")
                 
                 file.write("<div style=\"position: absolute; right: 0; top: 0;\">")
                 for region in bcma.regions:
