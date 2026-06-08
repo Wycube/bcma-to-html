@@ -1,5 +1,5 @@
 import struct, sys, os, argparse
-import archive, texture, layout
+import texture, layout, manual
 import PIL.Image
 
 
@@ -215,119 +215,58 @@ def main():
     bcma_path = args.manual
     root_path = os.path.dirname(sys.argv[0])
 
-    # Index the .bcma
-    bcma_darc = None
+    # Read in the .bcma
+    bcma = None
     with open(bcma_path, "rb") as file:
-        bcma_darc = archive.DARC(file.read())
+        bcma = manual.BCMA(file.read())
 
-    # Get BcmaInfo
-    info_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file("./BcmaInfo.arc")))
-    info_clyt = layout.BCLYT(info_darc.get_file("./blyt/BcmaInfo.bclyt"))
-    info_tree = info_clyt.layout
-    
-    # Get region/language info
-    region_info = info_tree.get_user_data("RegionInfo")
-    assert(region_info is not None)
-
-    languages = []    
-    for i in range(region_info.dict["RegionNum"][0]):
-        region_code = region_info.dict["Region_{:03}".format(i)]
-        language_info = info_tree.get_user_data(region_code)
-        assert(language_info is not None)
-
-        languages.append((region_code, []))
-        for j in range(language_info.dict["LangNum"][0]):
-            languages[-1][1].append(language_info.dict["Lang_{:03}".format(j)])
-    
-    tex_arc_names = []
-    for i in range(len(languages)):
-        for j in range(len(languages[i][1])):
-            language_code = languages[i][0] + "_" + languages[i][1][j]
-            texres_info = info_tree.get_user_data(language_code)
-            for k in range(texres_info.dict["TexResNum"][0]):
-                archive_name = texres_info.dict["TexRes_{:04X}".format(k)]
-                if archive_name not in tex_arc_names:
-                    tex_arc_names.append(archive_name)
-    
-    tex_archives = []
-    for name in tex_arc_names:
-        tex_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file("./" + name)))
-        tex_archives.append(tex_darc)
-
-    # Parse and convert each language
+    # Convert each language
     categories_html = {}
     page_num = {}
     output_dirs = [f"{root_path}/output"]
-    for region in languages:
+    for region in bcma.regions:
         output_dirs.append(region[0])
         for lang in region[1]:
+            lang_str = f"{region[0]}_{lang}"
             output_dirs.append(lang)
             
             if not os.path.exists(fold_dirs(output_dirs)):
                 os.makedirs(fold_dirs(output_dirs))
 
-            # Get Index.bclyt
-            index_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file(f"./{region[0]}_{lang}_index.arc")))
-            index_clyt = layout.BCLYT(index_darc.get_file("./blyt/Index.bclyt"))
-            index_tree = index_clyt.layout
-
-            # Get metadata
-            metadata = index_tree.get_user_data("MetaData")
-            assert(metadata is not None)
-
-            # Get page titles
-            titles = []
-            for i in range(metadata.dict["PageNum"][0]):
-                page_title = index_tree.get_named_obj(f"PageTitle_{i:03}")
-                assert(page_title is not None)
-                titles.append(page_title.text)
-                page_num[f"{region[0]}_{lang}"] = metadata.dict["PageNum"][0]
-                
-            # Get categories
-            categories = []
-            for i in range(metadata.dict["CategoryNum"][0]):
-                category = index_tree.get_user_data(f"Category_{i:03}")
-                category_title = index_tree.get_named_obj(f"Category_{i:03}")
-                category_pages = []
-                for j in range(category.dict["CategoryPageNum"][0]):
-                    category_pages.append(category.dict[f"PageID_{j:03}"][0])
-
-                categories.append((category_title.text, category.dict["IsValid"][0] == 1, category_pages))
-
             # Make HTML for home page category links
-            category_html = "<p>{}_{}</p>".format(region[0], lang)
-            for category in categories:
+            category_html = f"<p>{lang_str}</p>"
+            for category in bcma.get_categories(f"{region[0]}_{lang}"):
                 if category[1]:
                     category_html += "<p>{}</p>".format(category[0])
                 
                 for page in category[2]:
-                    category_html += "<a href=\"{}/{}/Page_{:03}.html\">{}</a><br>".format(region[0], lang, page, titles[page])
+                    category_html += "<a href=\"{}/{}/Page_{:03}.html\">{}</a><br>".format(region[0], lang, page, bcma.get_page_title(lang_str, page))
             category_html += "<br>"
-            categories_html[f"{region[0]}_{lang}"] = category_html
+            categories_html[lang_str] = category_html
 
             # Convert each page (small ones for now)
-            for i, splits in enumerate(metadata.dict["SplitNumS"]):
-                page_darc = archive.DARC(archive.decompress_lz10(bcma_darc.get_file(f"./{region[0]}_{lang}_small.arc")))
+            for i in range(bcma.get_page_count(lang_str)):
                 page_trees = []
 
                 # Background
-                page_file = page_darc.get_file(f"./blyt/Page_{i:03}_small_bg.bclyt")
-                page_trees.append(layout.BCLYT(page_file).layout)
+                page_file = bcma.get_page_bg(lang_str, i)
+                page_trees.append(page_file.layout)
                 
-                for split in range(splits):
-                    page_file = page_darc.get_file(f"./blyt/Page_{i:03}_small_{split}.bclyt")
-                    page_trees.append(layout.BCLYT(page_file).layout)
+                for split in range(bcma.get_page_splits(lang_str, i)):
+                    page_file = bcma.get_page_split(lang_str, i, split)
+                    page_trees.append(page_file.layout)
                 
                 output_path = fold_dirs(output_dirs)
-                export(page_trees, tex_archives, f"{output_path}/Page_{i:03}", f"{region[0]}_{lang}")
+                export(page_trees, bcma.tex_archives, f"{output_path}/Page_{i:03}", lang_str)
 
             output_dirs.pop()
         output_dirs.pop()
 
     # Output home pages
-    for region in languages:
+    for region in bcma.regions:
         for lang in region[1]:
-            with open(output_dirs[0] + f"/Home_{region[0]}_{lang}.html", "w", encoding="utf-8") as file:
+            lang_str =  f"{region[0]}_{lang}"
+            with open(output_dirs[0] + f"/Home_{lang_str}.html", "w", encoding="utf-8") as file:
                 file.write("<!DOCTYPE html>\n")
                 file.write("<html>\n")
                 file.write("    <head>\n")
@@ -337,10 +276,10 @@ def main():
                 file.write("    </head>\n")
                 file.write("    <body>\n")
 
-                file.write(categories_html[f"{region[0]}_{lang}"])
+                file.write(categories_html[lang_str])
                 
                 file.write("<div style=\"position: absolute; right: 0; top: 0;\">")
-                for region in languages:
+                for region in bcma.regions:
                     for lang in region[1]:
                         file.write("        <a href=\"Home_{0}_{1}.html\">{0}_{1}</a>".format(region[0], lang))
                 file.write("</div>")
@@ -348,6 +287,5 @@ def main():
                 file.write("    </body>\n")
 
     print("Successfully Completed!")
-
 
 main()

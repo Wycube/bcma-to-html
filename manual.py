@@ -40,7 +40,7 @@ class BCMA:
             tex_darc = archive.DARC(archive.decompress_lz10(self.archive.get_file("./" + name)))
             tex_archives.append(tex_darc)
         
-        return region_info, tex_archives
+        return languages, tex_archives
     
     def _retrieve_indices(self):
         indices = {}
@@ -71,10 +71,10 @@ class BCMA:
                 # Get splits
                 splits_s = metadata["SplitNumS"]
                 splits_l = metadata["SplitNumL"]
-                assert len(splits_s) == len(splits_l) == len(titles), f"Page counts mismatch in {region}_{lang} index!"
+                assert len(splits_s) == len(splits_l) == len(titles), f"Page counts mismatch in {region[0]}_{lang} index!"
 
                 # Pack into single tuple per language
-                indices[f"{region}_{lang}"] = (categories, [(titles[i], splits_s[i], splits_l[i]) for i in range(len(titles))])
+                indices[f"{region[0]}_{lang}"] = (categories, [(titles[i], splits_s[i], splits_l[i]) for i in range(len(titles))])
 
         return indices
 
@@ -126,26 +126,26 @@ class BCMA:
         
         return self.indices[lang_str][1][index][2] if large else self.indices[lang_str][1][index][1]
 
-    def _get_page_file(self, lang_str, file_str):
+    def _get_page_file(self, lang_str, file_str, large=False):
         if lang_str not in self.page_archives:
             return None
 
-        if not self.page_archives[lang_str].has_file(file_str):
+        if not self.page_archives[lang_str][int(large)].has_file(file_str):
             return None
 
-        return layout.BCLYT(self.page_archives[lang_str].get_file(file_str))
+        return layout.BCLYT(self.page_archives[lang_str][int(large)].get_file(file_str))
 
     def get_page_bg(self, lang_str, index, large=False):
-        file_str = f"./blyt/Page_{index:03}_{"large" if large else "small"}_bg.arc"
-        return self._get_page_file(lang_str, file_str)
+        file_str = f"./blyt/Page_{index:03}_{"large" if large else "small"}_bg.bclyt"
+        return self._get_page_file(lang_str, file_str, large)
 
     def get_page_info(self, lang_str, index, large=False):
-        file_str = f"./blyt/Page_{index:03}_{"large" if large else "small"}_info.arc"
-        return self._get_page_file(lang_str, file_str)
+        file_str = f"./blyt/Page_{index:03}_{"large" if large else "small"}_info.bclyt"
+        return self._get_page_file(lang_str, file_str, large)
     
     def get_page_split(self, lang_str, index, split, large=False):
-        file_str = f"./blyt/Page_{index:03}_{"large" if large else "small"}_{split}.arc"
-        return self._get_page_file(lang_str, file_str)
+        file_str = f"./blyt/Page_{index:03}_{"large" if large else "small"}_{split}.bclyt"
+        return self._get_page_file(lang_str, file_str, large)
 
     def get_texture(self, name):
         for darc in self.tex_archives:
