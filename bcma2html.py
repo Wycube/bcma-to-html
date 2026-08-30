@@ -86,6 +86,7 @@ def export(tree, tex_archives, path, region_lang, title):
     css.add_property(".manual", "white-space", "preserve nowrap")
     css.add_property(".manual", "font-family", "sans-serif")
     css.add_property(".manual", "overflow", "hidden")
+    css.add_property(".manual", "user-select", "text")
 
     html.add_raw(f"<a href=\"../../Home_{region_lang}.html\">Home</a>")
     html.start_div("manual")
@@ -104,7 +105,6 @@ def convert(tree, tex_archives, node, path: str, html, css):
         css.add_property(f".{node.name}", "top", f"{-node.pane_data.translation[1]}px")
         css.add_property(f".{node.name}", "width", f"{node.pane_data.size[0]}px")
         css.add_property(f".{node.name}", "height", f"{node.pane_data.size[1]}px")
-        css.add_property(f".{node.name}", "user-select", "text")
 
     if type(node) == layout.LayoutTree or type(node) == layout.Pane:
         for child in node.children:
@@ -176,7 +176,7 @@ def convert(tree, tex_archives, node, path: str, html, css):
             css.add_property(f".{node.name}", "box-sizing", "content-box")
             css.add_property(f".{node.name}", "background-clip", "padding-box")
         
-        if len(tex_index) == 1:
+        if len(tex_index) == 1 and len(mat_list.materials[mat_index][2]) > 0 and len(mat_list.materials[mat_index][3]) > 0:
             assert tex_list is not None, "Texture list missing!"
             tex_name: str = tex_list.textures[tex_index[0][0]]
             tex_name_png = tex_name.replace(".bclim", ".png")
