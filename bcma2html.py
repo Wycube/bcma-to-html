@@ -87,6 +87,7 @@ def export(trees, tex_archives, path, region_lang):
     css.add_property(".manual", "width", f"{trees[0].canvas_size[0]}px")
     css.add_property(".manual", "height", f"{trees[0].canvas_size[1]}px")
     css.add_property(".manual", "white-space", "preserve nowrap")
+    css.add_property(".manual", "font-family", "sans-serif")
     css.add_property(".manual", "overflow", "hidden")
 
     html.add_raw(f"<a href=\"../../Home_{region_lang}.html\">Home</a>")
@@ -120,7 +121,8 @@ def convert(tree, tex_archives, node, path: str, html, css):
         css.add_property(f".{node.name}", "top", f"{-node.pane_data.translation[1]}px")
         css.add_property(f".{node.name}", "width", f"{node.pane_data.size[0]}px")
         css.add_property(f".{node.name}", "height", f"{node.pane_data.size[1]}px")
-        css.add_property(f".{node.name}", "font-size", f"{node.font_scale[1]}px")
+        css.add_property(f".{node.name}", "font-size", f"{node.font_scale[0]}px")
+        css.add_property(f".{node.name}", "letter-spacing", f"{node.h_font_space}px")
         css.add_property(f".{node.name}", "color", f"#{font_color:08X}")
     elif type(node) == layout.Picture:
         assert node.tex_coords == [(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0)], f"Texcoords other than default not handled yet! {node.tex_coords}"
