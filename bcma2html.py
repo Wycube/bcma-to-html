@@ -87,6 +87,7 @@ def export(trees, tex_archives, path, region_lang):
     css.add_property(".manual", "width", f"{trees[0].canvas_size[0]}px")
     css.add_property(".manual", "height", f"{trees[0].canvas_size[1]}px")
     css.add_property(".manual", "white-space", "preserve nowrap")
+    css.add_property(".manual", "overflow", "hidden")
 
     html.add_raw(f"<a href=\"../../Home_{region_lang}.html\">Home</a>")
     html.start_div("manual")
@@ -222,7 +223,6 @@ def main():
 
     # Convert each language
     categories_html = {}
-    page_num = {}
     output_dirs = [f"{root_path}/output"]
     for region in bcma.regions:
         output_dirs.append(region[0])
