@@ -105,6 +105,14 @@ def _decode_etc1(data: bytes, tiles: tuple[int, int], alpha: bool = False):
     return decoded
 
 class BCLIM:
+    def get_size(data: bytes):
+        # Assume a valid BCLIM file
+        header_data = data[-0x28:]
+        endian = '<' if header_data[4:6] == b'\xff\xfe' else '>'
+        header_format = endian + "IBBII4sIHHII"
+        header = struct.unpack(header_format, header_data[6:])
+        return (header[7], header[8])
+
     def __init__(self, data: bytes):
         self.data = data
         self.header = self._parse_header()

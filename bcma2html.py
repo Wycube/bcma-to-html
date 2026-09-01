@@ -1,5 +1,5 @@
 import struct, sys, os, argparse
-import texture, layout, manual
+import texture, layout, manual, cache
 import PIL.Image
 
 
@@ -62,7 +62,7 @@ class CSSWriter:
                     file.write(f"\t{property}\n")
                 file.write("}")
 
-def export(tree, tex_archives, path, region_lang, title):
+def export(tree, tex_cache, path, region_lang, title):
     with open(f"{path}.txt", "w", encoding="utf-8") as text_file:
         convert_txt(tree, text_file)
 
@@ -90,13 +90,13 @@ def export(tree, tex_archives, path, region_lang, title):
 
     html.add_raw(f"<a href=\"../../Home_{region_lang}.html\">Home</a>")
     html.start_div("manual")
-    convert(tree, tex_archives, tree, path, html, css)
+    convert(tree, tex_cache, tree, path, html, css)
     html.end_div()
 
     html.write()
     css.write()
 
-def convert(tree, tex_archives, node, path: str, html, css):
+def convert(tree, tex_cache, node, path: str, html, css):
     if type(node) == layout.Pane:
         html.start_div(node.name)
 
@@ -108,7 +108,7 @@ def convert(tree, tex_archives, node, path: str, html, css):
 
     if type(node) == layout.LayoutTree or type(node) == layout.Pane:
         for child in node.children:
-            convert(tree, tex_archives, child, path, html, css)
+            convert(tree, tex_cache, child, path, html, css)
     elif type(node) == layout.Text:
         html.add_raw(f"<p class=\"{node.name}\">{node.text}</p>")
 
@@ -133,20 +133,16 @@ def convert(tree, tex_archives, node, path: str, html, css):
         mat_index = node.tex_data[16]
         tex_index = mat_list.materials[mat_index][1][0][0]
         tex_name: str = tex_list.textures[tex_index]
+        tex_cache.cache(tex_name)
         tex_name_png = tex_name.replace(".bclim", ".png")
 
-        html.add_raw(f"<img src=\"{tex_name_png}\" class=\"{node.name}\">")
+        html.add_raw(f"<img src=\"../../imgs/{tex_name_png}\" class=\"{node.name}\">")
 
         css.add_property(f".{node.name}", "position", "absolute")
         css.add_property(f".{node.name}", "left", f"{node.pane_data.translation[0]}px")
         css.add_property(f".{node.name}", "top", f"{-node.pane_data.translation[1]}px")
         css.add_property(f".{node.name}", "width", f"{node.pane_data.size[0]}px")
         css.add_property(f".{node.name}", "height", f"{node.pane_data.size[1]}px")
-
-        for darc in tex_archives:
-            if darc.has_file("./timg/" + tex_name):
-                bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
-                bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name_png)
     elif type(node) == layout.Window:
         mat_list = tree.get_toplevel_obj_of_type(layout.MaterialList)
         tex_list = tree.get_toplevel_obj_of_type(layout.TextureList)
@@ -156,7 +152,7 @@ def convert(tree, tex_archives, node, path: str, html, css):
         tex_index = mat_list.materials[mat_index][1]
         back_color = struct.unpack("<I", struct.pack(">I", node.cont_data[0]))[0]
 
-        node.load_texture_sizes(mat_list, tex_list, tex_archives)
+        node.load_texture_sizes(mat_list, tex_list, tex_cache.archives)
         css.add_property(f".{node.name}", "position", "absolute")
         css.add_property(f".{node.name}", "left", f"{node.pane_data.translation[0]}px")
         css.add_property(f".{node.name}", "top", f"{-node.pane_data.translation[1]}px")
@@ -179,12 +175,9 @@ def convert(tree, tex_archives, node, path: str, html, css):
         if len(tex_index) == 1 and len(mat_list.materials[mat_index][2]) > 0 and len(mat_list.materials[mat_index][3]) > 0:
             assert tex_list is not None, "Texture list missing!"
             tex_name: str = tex_list.textures[tex_index[0][0]]
+            tex_cache.cache(tex_name)
             tex_name_png = tex_name.replace(".bclim", ".png")
-            css.add_property(f".{node.name}", "background-image", "url(\"{}\")".format(tex_name_png))
-            for darc in tex_archives:
-                if darc.has_file("./timg/" + tex_name):
-                    bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
-                    bclim.save_as_png(path[:path.rfind('/')] + "/" + tex_name_png)
+            css.add_property(f".{node.name}", "background-image", f"url(\"../../imgs/{tex_name_png}\")")
 
         html.add_raw(f"<div class=\"{node.name}\"></div>")
 
@@ -219,6 +212,8 @@ def main():
     bcma = None
     with open(bcma_path, "rb") as file:
         bcma = manual.BCMA(file.read())
+
+    tex_cache = cache.TextureCache(bcma.tex_archives, f"{root_path}/output/imgs/")
 
     # Convert each language
     categories_html = {}
@@ -257,7 +252,7 @@ def main():
                     page_tree.merge(page_file.layout)
                 
                 output_path = fold_dirs(output_dirs)
-                export(page_tree, bcma.tex_archives, f"{output_path}/Page_{i:03}", lang_str, bcma.get_page_title(lang_str, i).rstrip("\0"))
+                export(page_tree, tex_cache, f"{output_path}/Page_{i:03}", lang_str, bcma.get_page_title(lang_str, i).rstrip("\0"))
 
             output_dirs.pop()
         output_dirs.pop()
@@ -287,6 +282,9 @@ def main():
                 file.write("</div>")
 
                 file.write("    </body>\n")
+
+    # Export images from texture cache
+    tex_cache.export()
 
     print("Successfully Completed!")
 

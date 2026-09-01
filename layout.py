@@ -323,7 +323,6 @@ class Window(Named):
             start_x = 0 if i % 2 == 0 else corners[0][0].header[7] + 1
             start_y = 0 if i // 2 == 0 else corners[0][0].header[8] + 1
 
-
             for x in range(corner[0].header[7]):
                 for y in range(corner[0].header[8]):
                     src_x = (corner[0].header[7] - 1 - x) if corner[1] else x
@@ -364,7 +363,6 @@ class Window(Named):
                 self.content_box[3] -= self.frame_sizes[0][1]
             case 4:
                 # Assuming widths and heights of aligned corners are the same
-
                 self.content_box[0] += self.frame_sizes[0][0]
                 self.content_box[1] -= self.frame_sizes[1][0]
                 self.content_box[2] += self.frame_sizes[0][1]
