@@ -111,6 +111,9 @@ def convert(tree, tex_cache, node, path: str, html, css):
     elif type(node) == layout.Text:
         html.add_raw(f"<p class=\"{node.name}\">{node.text}</p>")
 
+        # Don't know what these flags do, apparently is related to line alignment but I've never seen it not zero outside the index
+        assert node.flags == 0, f"Non-zero flags value on {node.name}!"
+
         font_color = struct.unpack("<I", struct.pack(">I", node.top_color))[0]
         css.add_property(f".{node.name}", "position", "absolute")
         css.add_property(f".{node.name}", "left", f"{node.pane_data.translation[0]}px")
@@ -197,6 +200,8 @@ def fold_dirs(dirs):
 
     return output_path
 
+import archive
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("manual", help="Path to the BCMA file (usually Manual.bcma)")
@@ -209,6 +214,12 @@ def main():
     bcma = None
     with open(bcma_path, "rb") as file:
         bcma = manual.BCMA(file.read())
+
+    # TEMP
+    info_darc = archive.DARC(archive.decompress_lz10(bcma.archive.get_file("./BcmaInfo.arc")))
+    info_tree = layout.BCLYT(info_darc.get_file("./blyt/BcmaInfo.bclyt")).layout
+    with open(f"output/index.txt", "w", encoding="utf-8") as text_file:
+            convert_txt(info_tree, text_file)
 
     # Create global texture cache to be used when exporting
     tex_cache = cache.TextureCache(bcma.tex_archives, f"{root_path}/output/imgs/")

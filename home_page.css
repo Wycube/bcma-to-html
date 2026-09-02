@@ -19,15 +19,16 @@ body {
     padding: 0.3em;
     color: white;
     text-align: center;
-    border-radius: 6px;
+    border-radius: 4px;
+    margin: 0.5em 0;
 }
 
 .page {
     display: block;
     text-decoration: none;
     color: black;
-    padding: 0.3em 0.4em;
-    margin-top: 0.5em;
+    padding: 0.2em 0.3em;
+    margin-top: 0.25em;
     border: #7FDE46 solid 3px;
     border-radius: 6px;
     text-overflow: ellipsis;
@@ -36,12 +37,12 @@ body {
 
 .icon {
     display: inline-block;
-    padding: 0.4em 0;
+    padding: 0.2em 0;
     margin-right: 0.5em;
     text-align: center;
-    border-radius: 6px;
+    border-radius: 4px;
     color: white;
-    width: 2em;
+    width: 1.5em;
 }
 
 .category-block:nth-child(12n+1) .icon, .category-block:nth-child(12n+1) .category {

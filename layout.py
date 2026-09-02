@@ -213,7 +213,7 @@ class Text(Named):
         self.str_max_length = text_data[1]
         self.material_id = text_data[2]
         self.font_id = text_data[3]
-        self.flags_2 = text_data[4]
+        self.flags = text_data[4]
         self.top_color = text_data[6]
         self.bottom_color = text_data[7]
         self.font_scale = (text_data[8], text_data[9])
@@ -223,7 +223,7 @@ class Text(Named):
 
     def print(self, level):
         str = " " * level
-        str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), flags({}), material_id({}), text:'{}')\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size, self.font_scale, self.h_font_space, self.v_font_space, self.flags_2, self.material_id, self.text)
+        str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), flags({}), material_id({}), text:'{}')\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size, self.font_scale, self.h_font_space, self.v_font_space, self.flags, self.material_id, self.text)
         return str
     
     def offset_material_id(self, offset):
