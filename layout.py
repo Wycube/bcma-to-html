@@ -199,15 +199,18 @@ class Text(Named):
     def parse_txt1(data):
         text_data = struct.unpack("<HHHHH2xIII2fff", data[0x4C:0x74])
         text_start = text_data[5]
-        text_end = struct.unpack("<I", data[4:8])[0]
-        string = data[text_start:text_end].decode("utf-16-le")
+        section_size = struct.unpack("<I", data[4:8])[0]
+
+        # Curious to see what a text element where these length values differ is like
+        assert text_data[0] == text_data[1] and text_data[0] <= (section_size - text_start), "Text string length and max length differ!"
+        string = data[text_start:text_start + text_data[0]].decode("utf-16-le")
 
         return PaneData(data), text_data, string
 
     def __init__(self, data):
         self.pane_data, text_data, self.text = Text.parse_txt1(data)
-        self.h_flags = text_data[0]
-        self.v_flags = text_data[1]
+        self.str_length = text_data[0]
+        self.str_max_length = text_data[1]
         self.material_id = text_data[2]
         self.font_id = text_data[3]
         self.flags_2 = text_data[4]
@@ -220,7 +223,7 @@ class Text(Named):
 
     def print(self, level):
         str = " " * level
-        str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), h_flags({}), v_flags({}), flags({}), material_id({}), text:'{}')\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size, self.font_scale, self.h_font_space, self.v_font_space, self.h_flags, self.v_flags, self.flags_2, self.material_id, self.text)
+        str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), flags({}), material_id({}), text:'{}')\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size, self.font_scale, self.h_font_space, self.v_font_space, self.flags_2, self.material_id, self.text)
         return str
     
     def offset_material_id(self, offset):
