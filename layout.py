@@ -267,89 +267,29 @@ class Window(Named):
             # frame[0] += offset
             self.frames[i] = (frame[0] + offset, *frame[1:])
     
-    def load_texture_sizes(self, mat_list, tex_list, archive_list):
+    def load_texture_sizes(self, mat_list, tex_list, tex_cache):
         self.frame_sizes = []
+        frame_infos = []
 
         for frame in self.frames:
             material_id = frame[0]
             material = mat_list.materials[material_id]
             if len(material[1]) != 0:
                 tex_name = tex_list.textures[material[1][0][0]]
-                for darc in archive_list:
+                for darc in tex_cache.archives:
                     if darc.has_file("./timg/" + tex_name):
-                        bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
-                        self.frame_sizes.append((bclim.header[7], bclim.header[8]))
+                        self.frame_sizes.append(texture.BCLIM.get_size(darc.get_file("./timg/" + tex_name)))
+                        frame_infos.append((tex_name, frame[1]))
+                        break
             else:
                 self.frame_sizes.append((0, 0))
+                frame_infos = None
         
         self.calc_sizes()
 
-        # Construct nine-section image for border
-        corners = []
-        for frame in self.frames:
-            material_id = frame[0]
-            material = mat_list.materials[material_id]
-            if len(material[1]) != 0:
-                tex_name = tex_list.textures[material[1][0][0]]
-                for darc in archive_list:
-                    if darc.has_file("./timg/" + tex_name):
-                        bclim = texture.BCLIM(darc.get_file("./timg/" + tex_name))
-                        
-                        # TODO: Handle all flip types
-                        assert frame[1] in (0, 1, 2, 4), f"Flip type {frame[1]} unimplemented!"
-                        corners.append((bclim, frame[1] in (1, 4), frame[1] in (2, 4)))
-
-        self.border_image_size = (0, 0)
-        self.border_image = None
-
-        if len(corners) == 0:
-            return
-        elif len(corners) == 1:
-            corners.append((corners[0][0], True, False))
-            corners.append((corners[0][0], False, True))
-            corners.append((corners[0][0], True, True))
-
-        # Make sure corner dimensions match
-        # TODO: Figure out what happens if they don't
-        assert(corners[0][0].header[7] == corners[2][0].header[7])
-        assert(corners[1][0].header[7] == corners[3][0].header[7])
-        assert(corners[0][0].header[8] == corners[1][0].header[8])
-        assert(corners[2][0].header[8] == corners[3][0].header[8])
-        self.border_image_size = (corners[0][0].header[7] + 1 + corners[1][0].header[7], corners[2][0].header[8] + 1 + corners[1][0].header[8])
-        self.border_image = [0 for _ in range(self.border_image_size[0] * self.border_image_size[1] * 4)]
-
-        for i, corner in enumerate(corners):
-            # Copy image to specific spot
-            start_x = 0 if i % 2 == 0 else corners[0][0].header[7] + 1
-            start_y = 0 if i // 2 == 0 else corners[0][0].header[8] + 1
-
-            for x in range(corner[0].header[7]):
-                for y in range(corner[0].header[8]):
-                    src_x = (corner[0].header[7] - 1 - x) if corner[1] else x
-                    src_y = (corner[0].header[8] - 1 - y) if corner[2] else y
-                    self.border_image[(start_x + x + (start_y + y) * self.border_image_size[0]) * 4 + 0] = corner[0].image[(src_x + src_y * corner[0].header[7]) * 4 + 0]
-                    self.border_image[(start_x + x + (start_y + y) * self.border_image_size[0]) * 4 + 1] = corner[0].image[(src_x + src_y * corner[0].header[7]) * 4 + 1]
-                    self.border_image[(start_x + x + (start_y + y) * self.border_image_size[0]) * 4 + 2] = corner[0].image[(src_x + src_y * corner[0].header[7]) * 4 + 2]
-                    self.border_image[(start_x + x + (start_y + y) * self.border_image_size[0]) * 4 + 3] = corner[0].image[(src_x + src_y * corner[0].header[7]) * 4 + 3]
-
-            # Copy last edge to next row/column for sides
-            start_x1 = [corners[0][0].header[7] - 1, corners[0][0].header[7] + 1, 0, corners[0][0].header[7] + 1][i]
-            start_x2 = [corners[0][0].header[7], corners[0][0].header[7] + 1, 0, corners[0][0].header[7]][i]
-            start_y1 = [0, corners[0][0].header[8] - 1, corners[0][0].header[8] + 1, corners[0][0].header[8] + 1][i]
-            start_y2 = [0, corners[0][0].header[8], corners[0][0].header[8], corners[0][0].header[8] + 1][i]
-            direction = [(0, 1), (1, 0), (1, 0), (0, 1)][i]
-            size = [corners[0][0].header[8], corners[0][0].header[7], corners[0][0].header[7], corners[0][0].header[8]][i]
-
-            for i in range(size):
-                x1 = start_x1 + direction[0] * i
-                y1 = start_y1 + direction[1] * i
-                x2 = start_x2 + direction[0] * i
-                y2 = start_y2 + direction[1] * i
-                self.border_image[(x2 + y2 * self.border_image_size[0]) * 4 + 0] = self.border_image[(x1 + y1 * self.border_image_size[0]) * 4 + 0]
-                self.border_image[(x2 + y2 * self.border_image_size[0]) * 4 + 1] = self.border_image[(x1 + y1 * self.border_image_size[0]) * 4 + 1]
-                self.border_image[(x2 + y2 * self.border_image_size[0]) * 4 + 2] = self.border_image[(x1 + y1 * self.border_image_size[0]) * 4 + 2]
-                self.border_image[(x2 + y2 * self.border_image_size[0]) * 4 + 3] = self.border_image[(x1 + y1 * self.border_image_size[0]) * 4 + 3]
-
+        self.border_image_name = None
+        if frame_infos is not None:
+            self.border_image_name = tex_cache.cache_border(frame_infos)[1]
 
     def calc_sizes(self):
         self.content_box = [0, self.pane_data.size[0], 0, self.pane_data.size[1]]

@@ -1,6 +1,5 @@
 import struct, sys, os, argparse
-import texture, layout, manual, cache
-import PIL.Image
+import layout, manual, cache
 
 
 class HTMLWriter:
@@ -60,11 +59,11 @@ class CSSWriter:
                 file.write(f"{props[0]} {{\n")
                 for property in props[1]:
                     file.write(f"\t{property}\n")
-                file.write("}")
+                file.write("}\n\n")
 
 def export(tree, tex_cache, path, region_lang, title):
-    with open(f"{path}.txt", "w", encoding="utf-8") as text_file:
-        convert_txt(tree, text_file)
+    # with open(f"{path}.txt", "w", encoding="utf-8") as text_file:
+    #     convert_txt(tree, text_file)
 
     css_name = os.path.basename(path)
     html = HTMLWriter(title, path + ".html", css_name + ".css")
@@ -152,7 +151,7 @@ def convert(tree, tex_cache, node, path: str, html, css):
         tex_index = mat_list.materials[mat_index][1]
         back_color = struct.unpack("<I", struct.pack(">I", node.cont_data[0]))[0]
 
-        node.load_texture_sizes(mat_list, tex_list, tex_cache.archives)
+        node.load_texture_sizes(mat_list, tex_list, tex_cache)
         css.add_property(f".{node.name}", "position", "absolute")
         css.add_property(f".{node.name}", "left", f"{node.pane_data.translation[0]}px")
         css.add_property(f".{node.name}", "top", f"{-node.pane_data.translation[1]}px")
@@ -160,14 +159,14 @@ def convert(tree, tex_cache, node, path: str, html, css):
         css.add_property(f".{node.name}", "height", f"{node.content_box[3] - node.content_box[2]}px")
         css.add_property(f".{node.name}", "background-color", f"#{back_color:08X}")
 
-        if node.border_image is not None:
+        if node.border_image_name is not None:
             border_sizes = (node.content_box[2], node.pane_data.size[0] - node.content_box[1], node.pane_data.size[1] - node.content_box[3], node.content_box[0])
             css.add_property(f".{node.name}", "border", "solid transparent")
             css.add_property(f".{node.name}", "border-top-width", f"{border_sizes[0]}px")
             css.add_property(f".{node.name}", "border-right-width", f"{border_sizes[1]}px")
             css.add_property(f".{node.name}", "border-bottom-width", f"{border_sizes[2]}px")
             css.add_property(f".{node.name}", "border-left-width", f"{border_sizes[3]}px")
-            css.add_property(f".{node.name}", "border-image", "url(\"{}\")".format(path[path.rfind('/') + 1:] + "_" + node.name + ".png"))
+            css.add_property(f".{node.name}", "border-image", f"url(\"../../imgs/{node.border_image_name}.png\")")
             css.add_property(f".{node.name}", "border-image-slice", "{} {} {} {}".format(*border_sizes))
             css.add_property(f".{node.name}", "box-sizing", "content-box")
             css.add_property(f".{node.name}", "background-clip", "padding-box")
@@ -180,11 +179,6 @@ def convert(tree, tex_cache, node, path: str, html, css):
             css.add_property(f".{node.name}", "background-image", f"url(\"../../imgs/{tex_name_png}\")")
 
         html.add_raw(f"<div class=\"{node.name}\"></div>")
-
-        if node.border_image is not None:
-            export = PIL.Image.new("RGBA", node.border_image_size)
-            export.frombytes(bytes(node.border_image))
-            export.save(path + "_" + node.name + ".png", format="png")
 
     if type(node) == layout.Pane:
         html.end_div()
@@ -213,6 +207,7 @@ def main():
     with open(bcma_path, "rb") as file:
         bcma = manual.BCMA(file.read())
 
+    # Create global texture cache to be used when exporting
     tex_cache = cache.TextureCache(bcma.tex_archives, f"{root_path}/output/imgs/")
 
     # Convert each language
