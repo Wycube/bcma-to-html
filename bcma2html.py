@@ -61,9 +61,10 @@ class CSSWriter:
                     file.write(f"\t{property}\n")
                 file.write("}\n\n")
 
-def export(tree: layout.LayoutTree, tex_cache: cache.TextureCache, path: str, region_lang: str, title: str):
-    # with open(f"{path}.txt", "w", encoding="utf-8") as text_file:
-    #     convert_txt(tree, text_file)
+def export(tree: layout.LayoutTree, tex_cache: cache.TextureCache, path: str, region_lang: str, title: str, do_html: bool, do_css: bool, do_txt: bool):
+    if do_txt:
+        with open(f"{path}.txt", "w", encoding="utf-8") as text_file:
+            convert_txt(tree, text_file)
 
     css_name = os.path.basename(path)
     html = HTMLWriter(title, path + ".html", css_name + ".css")
@@ -92,8 +93,10 @@ def export(tree: layout.LayoutTree, tex_cache: cache.TextureCache, path: str, re
     convert(tree, tex_cache, tree, path, html, css)
     html.end_div()
 
-    html.write()
-    css.write()
+    if do_html:
+        html.write()
+    if do_css:
+        css.write()
 
 def convert(tree: layout.LayoutTree, tex_cache: cache.TextureCache, node, path: str, html: HTMLWriter, css: CSSWriter):
     if type(node) == layout.Pane:
@@ -205,20 +208,29 @@ def main():
     parser.add_argument("manual", help="Path to the BCMA file (usually Manual.bcma)")
     parser.add_argument("-t", "--title", help="Title of the home page, defaults to the filename.")
     parser.add_argument("-l", "--lang", action="append", help="Only output a specific language in the format 'REG_la', can do multiple, all by default.")
+    parser.add_argument("--nohtml", action="store_true", help="Don't output any html.")
+    parser.add_argument("--nocss", action="store_true", help="Don't output any css.")
+    parser.add_argument("--noimgs", action="store_true", help="Don't output any images.")
+    parser.add_argument("--txt", action="store_true", help="Additionally output a text representation of each page and the index.")    
     args = parser.parse_args()
 
     bcma_path = args.manual
     root_path = os.path.dirname(sys.argv[0])
     title_name = args.title if args.title is not None else pathlib.Path(bcma_path).name
+    do_html = not args.nohtml
+    do_css = not args.nocss
+    do_imgs = not args.noimgs
+    do_txt = args.txt
 
     # Read in the .bcma
     bcma = None
     with open(bcma_path, "rb") as file:
         bcma = manual.BCMA(file.read())
 
-    # TEMP
-    # with open(f"output/index.txt", "w", encoding="utf-8") as text_file:
-    #         convert_txt(bcma.get_bcmainfo(), text_file)
+    # Write index text
+    if do_txt:
+        with open(f"output/index.txt", "w", encoding="utf-8") as text_file:
+                convert_txt(bcma.get_bcmainfo().layout, text_file)
 
     # Use the languages provided on the command line, if any were provided
     langs = bcma.get_all_langs()
@@ -266,36 +278,38 @@ def main():
                 page_tree.merge(page_file.layout)
             
             output_path = fold_dirs(output_dirs)
-            export(page_tree, tex_cache, f"{output_path}/Page_{i:03}", lang_str, bcma.get_page_title(lang_str, i).rstrip("\0"))
+            export(page_tree, tex_cache, f"{output_path}/Page_{i:03}", lang_str, bcma.get_page_title(lang_str, i).rstrip("\0"), do_html, do_css, do_txt)
 
         output_dirs.pop()
         output_dirs.pop()
 
     # Output home pages
-    for lang_str in langs:
-        with open(output_dirs[0] + f"/Home_{lang_str}.html", "w", encoding="utf-8") as file:
-            file.write("<!DOCTYPE html>\n")
-            file.write("<html>\n")
-            file.write("    <head>\n")
-            file.write(f"        <title>{title_name}</title>\n")
-            file.write("        <meta charset=\"utf-8\">\n")
-            file.write("        <link rel=\"stylesheet\" href=\"../home_page.css\">\n")
-            file.write("    </head>\n")
-            file.write("    <body>\n")
+    if do_html:
+        for lang_str in langs:
+            with open(output_dirs[0] + f"/Home_{lang_str}.html", "w", encoding="utf-8") as file:
+                file.write("<!DOCTYPE html>\n")
+                file.write("<html>\n")
+                file.write("    <head>\n")
+                file.write(f"        <title>{title_name}</title>\n")
+                file.write("        <meta charset=\"utf-8\">\n")
+                file.write("        <link rel=\"stylesheet\" href=\"../home_page.css\">\n")
+                file.write("    </head>\n")
+                file.write("    <body>\n")
 
-            file.write("        <div class=\"index\">\n")
-            file.write(categories_html[lang_str])
-            file.write("        </div>\n")
-            
-            file.write("<div style=\"position: absolute; right: 0; top: 0;\">")
-            for lang_str2 in langs:
-                file.write("        <a href=\"Home_{0}.html\">{0}</a>".format(lang_str2))
-            file.write("</div>")
+                file.write("        <div class=\"index\">\n")
+                file.write(categories_html[lang_str])
+                file.write("        </div>\n")
+                
+                file.write("<div style=\"position: absolute; right: 0; top: 0;\">")
+                for lang_str2 in langs:
+                    file.write("        <a href=\"Home_{0}.html\">{0}</a>".format(lang_str2))
+                file.write("</div>")
 
-            file.write("    </body>\n")
+                file.write("    </body>\n")
 
     # Export images from texture cache
-    tex_cache.export()
+    if do_imgs:
+        tex_cache.export()
 
     print("Successfully Completed!")
 
