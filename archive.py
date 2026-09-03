@@ -124,6 +124,19 @@ class DARC:
                 return node[1:]
 
         return None
+
+    def _print_filesytem_impl(self, folder: list[str, list], level: int = 0):
+        for node in folder[1]:
+            print("{{:{}}}{{}}".format(level).format("", node[0]))
+            if isinstance(node[1], list):
+                self._print_filesytem_impl(node, level + 1)
+            elif node[0].endswith(".arc"):
+                # Recurse on archives contained within
+                arc = DARC(decompress_lz10(self.data[node[1]:node[1] + node[2]]))
+                arc._print_filesytem_impl(arc.file_tree[1][0], level + 1)
+
+    def print_filesytem(self):
+        self._print_filesytem_impl(self.file_tree)
     
     def has_file(self, name: str):
         return self._find_file_impl(name, "", self.file_tree) is not None

@@ -79,7 +79,7 @@ class BCMA:
         return indices
 
     def _get_page_archives(self):
-        page_archives = {}
+        page_archives: dict[str, tuple[archive.DARC, archive.DARC]] = {}
         for region in self.regions:
             for lang in region[1]:
                 darc_s = archive.DARC(archive.decompress_lz10(self.archive.get_file(f"./{region[0]}_{lang}_small.arc")))

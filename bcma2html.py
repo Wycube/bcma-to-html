@@ -211,7 +211,8 @@ def main():
     parser.add_argument("--nohtml", action="store_true", help="Don't output any html.")
     parser.add_argument("--nocss", action="store_true", help="Don't output any css.")
     parser.add_argument("--noimgs", action="store_true", help="Don't output any images.")
-    parser.add_argument("--txt", action="store_true", help="Additionally output a text representation of each page and the index.")    
+    parser.add_argument("--txt", action="store_true", help="Additionally output a text representation of each page and the index.")
+    parser.add_argument("--print", action="store_true", help="Print the filesystem of the .bcma and then exit without exporting anything.")
     args = parser.parse_args()
 
     bcma_path = args.manual
@@ -226,6 +227,10 @@ def main():
     bcma = None
     with open(bcma_path, "rb") as file:
         bcma = manual.BCMA(file.read())
+
+    if args.print:
+        bcma.archive.print_filesytem()
+        return
 
     # Write index text
     if do_txt:
