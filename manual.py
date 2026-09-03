@@ -95,6 +95,9 @@ class BCMA:
         info_darc = archive.DARC(archive.decompress_lz10(self.archive.get_file("./BcmaInfo.arc")))
         return layout.BCLYT(info_darc.get_file("./blyt/BcmaInfo.bclyt"))
 
+    def get_all_langs(self):
+        return self.indices.keys()
+
     def get_index(self, lang_str: str):
         if not self.archive.has_file(f"./{lang_str}_index.arc"):
             return None

@@ -1,4 +1,4 @@
-import struct, sys, os, argparse
+import struct, sys, os, argparse, pathlib
 import layout, manual, cache
 
 
@@ -203,10 +203,13 @@ def fold_dirs(dirs: list[str]):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("manual", help="Path to the BCMA file (usually Manual.bcma)")
+    parser.add_argument("-t", "--title", help="Title of the home page, defaults to the filename.")
+    parser.add_argument("-l", "--lang", action="append", help="Only output a specific language in the format 'REG_la', can do multiple, all by default.")
     args = parser.parse_args()
 
     bcma_path = args.manual
     root_path = os.path.dirname(sys.argv[0])
+    title_name = args.title if args.title is not None else pathlib.Path(bcma_path).name
 
     # Read in the .bcma
     bcma = None
@@ -214,10 +217,15 @@ def main():
         bcma = manual.BCMA(file.read())
 
     # TEMP
-    # info_darc = archive.DARC(archive.decompress_lz10(bcma.archive.get_file("./BcmaInfo.arc")))
-    # info_tree = layout.BCLYT(info_darc.get_file("./blyt/BcmaInfo.bclyt")).layout
     # with open(f"output/index.txt", "w", encoding="utf-8") as text_file:
-    #         convert_txt(info_tree, text_file)
+    #         convert_txt(bcma.get_bcmainfo(), text_file)
+
+    # Use the languages provided on the command line, if any were provided
+    langs = bcma.get_all_langs()
+    if args.lang is not None:
+        for lang_str in args.lang:
+            assert lang_str in langs, f"Invalid language '{lang_str}' specified!"
+        langs = args.lang
 
     # Create global texture cache to be used when exporting
     tex_cache = cache.TextureCache(bcma.tex_archives, f"{root_path}/output/imgs/")
@@ -225,70 +233,66 @@ def main():
     # Convert each language
     categories_html = {}
     output_dirs = [f"{root_path}/output"]
-    for region in bcma.regions:
-        output_dirs.append(region[0])
-        for lang in region[1]:
-            lang_str = f"{region[0]}_{lang}"
-            output_dirs.append(lang)
+    for lang_str in langs:
+        # Use region code and language code as the output directory
+        region = lang_str[:3]
+        lang = lang_str[4:]
+        output_dirs.extend([region, lang])
+        if not os.path.exists(fold_dirs(output_dirs)):
+            os.makedirs(fold_dirs(output_dirs))
+
+        # Make HTML for home page category links
+        category_html = ""
+        for category in bcma.get_categories(lang_str):
+            category_html += "<div class=\"category-block\">"
+            if category[1]:
+                category_html += "<p class=\"category\">{}</p>".format(category[0])
             
-            if not os.path.exists(fold_dirs(output_dirs)):
-                os.makedirs(fold_dirs(output_dirs))
+            for page in category[2]:
+                category_html += "<a class=\"page\" href=\"{}/{}/Page_{:03}.html\"><div class=\"icon\">{}</div>{}</a>".format(region, lang, page, 1 + page, bcma.get_page_title(lang_str, page))
+            category_html += "</div>"
+        categories_html[lang_str] = category_html
 
-            # Make HTML for home page category links
-            category_html = ""
-            for category in bcma.get_categories(f"{region[0]}_{lang}"):
-                category_html += "<div class=\"category-block\">"
-                if category[1]:
-                    category_html += "<p class=\"category\">{}</p>".format(category[0])
-                
-                for page in category[2]:
-                    category_html += "<a class=\"page\" href=\"{}/{}/Page_{:03}.html\"><div class=\"icon\">{}</div>{}</a>".format(region[0], lang, page, 1 + page, bcma.get_page_title(lang_str, page))
-                category_html += "</div>"
-            categories_html[lang_str] = category_html
+        # Convert each page (small ones for now)
+        for i in range(bcma.get_page_count(lang_str)):
+            page_tree = None
 
-            # Convert each page (small ones for now)
-            for i in range(bcma.get_page_count(lang_str)):
-                page_tree = None
+            # Background
+            page_file = bcma.get_page_bg(lang_str, i)
+            page_tree = page_file.layout
+            
+            for split in range(bcma.get_page_splits(lang_str, i)):
+                page_file = bcma.get_page_split(lang_str, i, split)
+                page_tree.merge(page_file.layout)
+            
+            output_path = fold_dirs(output_dirs)
+            export(page_tree, tex_cache, f"{output_path}/Page_{i:03}", lang_str, bcma.get_page_title(lang_str, i).rstrip("\0"))
 
-                # Background
-                page_file = bcma.get_page_bg(lang_str, i)
-                page_tree = page_file.layout
-                
-                for split in range(bcma.get_page_splits(lang_str, i)):
-                    page_file = bcma.get_page_split(lang_str, i, split)
-                    page_tree.merge(page_file.layout)
-                
-                output_path = fold_dirs(output_dirs)
-                export(page_tree, tex_cache, f"{output_path}/Page_{i:03}", lang_str, bcma.get_page_title(lang_str, i).rstrip("\0"))
-
-            output_dirs.pop()
+        output_dirs.pop()
         output_dirs.pop()
 
     # Output home pages
-    for region in bcma.regions:
-        for lang in region[1]:
-            lang_str =  f"{region[0]}_{lang}"
-            with open(output_dirs[0] + f"/Home_{lang_str}.html", "w", encoding="utf-8") as file:
-                file.write("<!DOCTYPE html>\n")
-                file.write("<html>\n")
-                file.write("    <head>\n")
-                file.write("        <title>bcma2html test</title>\n")
-                file.write("        <meta charset=\"utf-8\">\n")
-                file.write("        <link rel=\"stylesheet\" href=\"../home_page.css\">\n")
-                file.write("    </head>\n")
-                file.write("    <body>\n")
+    for lang_str in langs:
+        with open(output_dirs[0] + f"/Home_{lang_str}.html", "w", encoding="utf-8") as file:
+            file.write("<!DOCTYPE html>\n")
+            file.write("<html>\n")
+            file.write("    <head>\n")
+            file.write(f"        <title>{title_name}</title>\n")
+            file.write("        <meta charset=\"utf-8\">\n")
+            file.write("        <link rel=\"stylesheet\" href=\"../home_page.css\">\n")
+            file.write("    </head>\n")
+            file.write("    <body>\n")
 
-                file.write("        <div class=\"index\">\n")
-                file.write(categories_html[lang_str])
-                file.write("        </div>\n")
-                
-                file.write("<div style=\"position: absolute; right: 0; top: 0;\">")
-                for region in bcma.regions:
-                    for lang in region[1]:
-                        file.write("        <a href=\"Home_{0}_{1}.html\">{0}_{1}</a>".format(region[0], lang))
-                file.write("</div>")
+            file.write("        <div class=\"index\">\n")
+            file.write(categories_html[lang_str])
+            file.write("        </div>\n")
+            
+            file.write("<div style=\"position: absolute; right: 0; top: 0;\">")
+            for lang_str2 in langs:
+                file.write("        <a href=\"Home_{0}.html\">{0}</a>".format(lang_str2))
+            file.write("</div>")
 
-                file.write("    </body>\n")
+            file.write("    </body>\n")
 
     # Export images from texture cache
     tex_cache.export()
