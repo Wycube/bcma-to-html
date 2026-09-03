@@ -3,14 +3,14 @@ import layout, manual, cache
 
 
 class HTMLWriter:
-    def __init__(self, title, html_path, css_path):
+    def __init__(self, title: str, html_path: str, css_path: str):
         self.title = title
         self.html_path = html_path
         self.css_path = css_path
         self.body = ""
         self.tabs = 2
 
-    def start_div(self, css_class=None):
+    def start_div(self, css_class: str = None):
         if css_class is not None:
             self.add_raw(f"<div class=\"{css_class}\">")
         else:
@@ -21,7 +21,7 @@ class HTMLWriter:
         self.tabs -= 1
         self.add_raw("</div>")
 
-    def add_raw(self, str):
+    def add_raw(self, str: str):
         self.body += "\t" * self.tabs
         self.body += str
         self.body += "\n"
@@ -43,11 +43,11 @@ class HTMLWriter:
             file.write("\t</body>")
 
 class CSSWriter:
-    def __init__(self, path):
+    def __init__(self, path: str):
         self.path = path
         self.selectors = {}
     
-    def add_property(self, class_name, name, value):
+    def add_property(self, class_name: str, name: str, value: str):
         if class_name not in self.selectors:
             self.selectors[class_name] = []
         
@@ -61,7 +61,7 @@ class CSSWriter:
                     file.write(f"\t{property}\n")
                 file.write("}\n\n")
 
-def export(tree, tex_cache, path, region_lang, title):
+def export(tree: layout.LayoutTree, tex_cache: cache.TextureCache, path: str, region_lang: str, title: str):
     # with open(f"{path}.txt", "w", encoding="utf-8") as text_file:
     #     convert_txt(tree, text_file)
 
@@ -95,7 +95,7 @@ def export(tree, tex_cache, path, region_lang, title):
     html.write()
     css.write()
 
-def convert(tree, tex_cache, node, path: str, html, css):
+def convert(tree: layout.LayoutTree, tex_cache: cache.TextureCache, node, path: str, html: HTMLWriter, css: CSSWriter):
     if type(node) == layout.Pane:
         html.start_div(node.name)
 
@@ -189,18 +189,16 @@ def convert(tree, tex_cache, node, path: str, html, css):
     if type(node) == layout.Pane:
         html.end_div()
 
-def convert_txt(tree, text_file):
+def convert_txt(tree: layout.LayoutTree, text_file):
     text = tree.print()
     text_file.write(text)
 
-def fold_dirs(dirs):
+def fold_dirs(dirs: list[str]):
     output_path = dirs[0]
     for dir in dirs[1:]:
         output_path += f"/{dir}"
 
     return output_path
-
-import archive
 
 def main():
     parser = argparse.ArgumentParser()
@@ -216,10 +214,10 @@ def main():
         bcma = manual.BCMA(file.read())
 
     # TEMP
-    info_darc = archive.DARC(archive.decompress_lz10(bcma.archive.get_file("./BcmaInfo.arc")))
-    info_tree = layout.BCLYT(info_darc.get_file("./blyt/BcmaInfo.bclyt")).layout
-    with open(f"output/index.txt", "w", encoding="utf-8") as text_file:
-            convert_txt(info_tree, text_file)
+    # info_darc = archive.DARC(archive.decompress_lz10(bcma.archive.get_file("./BcmaInfo.arc")))
+    # info_tree = layout.BCLYT(info_darc.get_file("./blyt/BcmaInfo.bclyt")).layout
+    # with open(f"output/index.txt", "w", encoding="utf-8") as text_file:
+    #         convert_txt(info_tree, text_file)
 
     # Create global texture cache to be used when exporting
     tex_cache = cache.TextureCache(bcma.tex_archives, f"{root_path}/output/imgs/")

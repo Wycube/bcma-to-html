@@ -4,38 +4,38 @@ import PIL
 
 
 class TextureCache:
-    def __init__(self, archives, export_dir):
+    def __init__(self, archives: list[archive.DARC], export_dir: str):
         self.archives = archives
         self.export_dir = export_dir
-        self.cached_textures = []
-        self.cached_borders = []
+        self.cached_textures: list[str] = []
+        self.cached_borders: list[tuple[list[tuple[str, int]], tuple[int, int], str, list[int]]] = []
 
-    def find(self, name):
+    def find(self, name: str):
         for darc in self.archives:
             if darc.has_file("./timg/" + name):
                 return texture.BCLIM.get_size(darc.get_file("./timg/" + name))
 
         return None
 
-    def cache(self, name):
+    def cache(self, name: str):
         size = self.find(name)
         if size is not None and name not in self.cached_textures:
             self.cached_textures.append(name)
 
-    def find_border(self, frames):
+    def find_border(self, frames: list[tuple[str, int]]):
         for border in self.cached_borders:
             if border[0] == frames:
                 return border[1:]
 
         return None
 
-    def cache_border(self, frames):
+    def cache_border(self, frames: list[tuple[str, int]]):
         info =  self.find_border(frames)
         if info is not None:
             return info
 
         # Create nine-patch image and add to cache
-        corners = []
+        corners: list[tuple[texture.BCLIM, bool, bool]] = []
         for frame in frames:
             name = frame[0]
             for darc in self.archives:

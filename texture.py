@@ -66,7 +66,7 @@ def _decode_etc1_tile(word: int, alphas: int):
     
     return tile
 
-def _copy_tile(buffer, start, width, tile):
+def _copy_tile(buffer, start: int, width: int, tile: list[int]):
     for i in range(16):
         tile_x = i // 4
         tile_y = i % 4
@@ -181,7 +181,7 @@ class BCLIM:
         
         return image
 
-    def _decode_pixel(self, index):
+    def _decode_pixel(self, index: int):
         match self.header[9]:
             case 0: # L8
                 rgba = [self.data[index]] * 3
@@ -222,7 +222,7 @@ class BCLIM:
             case _:
                 return [0, 0, 0, 0]
     
-    def save_as_png(self, path):
+    def save_as_png(self, path: str):
         export = PIL.Image.new("RGBA", (self.header[7], self.header[8]))
         export.frombytes(self.image)
         export.save(path, format="png")

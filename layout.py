@@ -1,14 +1,14 @@
 import struct
-import texture
+import texture, cache
 
 
 class Named:
-    def __init__(self, name):
+    def __init__(self, name: str):
         self.name = name
 
 class PaneData:
-    def __init__(self, data):
-        pane_data = struct.unpack("<bbbx16s8s3f3f2f2f", data[8:0x4C])
+    def __init__(self, data: bytes):
+        pane_data: tuple[int, int, int, bytes, bytes, float, float, float, float, float, float, float, float, float, float] = struct.unpack("<bbbx16s8s3f3f2f2f", data[8:0x4C])
         self.flags = pane_data[0]
         self.origin = pane_data[1]
         self.alpha = pane_data[2]
@@ -20,10 +20,10 @@ class PaneData:
         self.size = (pane_data[13], pane_data[14])
 
 class TextureList:
-    def parse_txl1(data):
+    def parse_txl1(data: bytes):
         num_textures = struct.unpack("<I", data[8:12])[0]
         name_offsets = struct.unpack(f"<{num_textures}I", data[12:12 + 4 * num_textures])
-        textures = []
+        textures: list[str] = []
 
         for name_offset in name_offsets:
             term_pos = data.find(b'\x00', 12 + name_offset)
@@ -32,10 +32,10 @@ class TextureList:
 
         return textures
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         self.textures = TextureList.parse_txl1(data)
 
-    def print(self, level):
+    def print(self, level: int):
         str = " " * level
         str += f"TextureList({self.textures})\n"
         return str
@@ -44,10 +44,10 @@ class TextureList:
         pass
 
 class FontList:
-    def parse_fnl1(data):
+    def parse_fnl1(data: bytes):
         num_fonts = struct.unpack("<I", data[8:12])[0]
         name_offsets = struct.unpack(f"<{num_fonts}I", data[12:12 + 4 * num_fonts])
-        fonts = []
+        fonts: list[str] = []
 
         for name_offset in name_offsets:
             term_pos = data.find(b'\x00', 12 + name_offset)
@@ -56,10 +56,10 @@ class FontList:
 
         return fonts
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         self.fonts = FontList.parse_fnl1(data)
 
-    def print(self, level):
+    def print(self, level: int):
         str = " " * level
         str += f"FontList({self.fonts})\n"
         return str
@@ -68,28 +68,28 @@ class FontList:
         pass
 
 class MaterialList:
-    def parse_mat1(data):
-        num_entries = struct.unpack("<I", data[8:12])[0]
-        entry_offsets = struct.unpack(f"<{num_entries}I", data[12:12 + 4 * num_entries])
-        materials = []
+    def parse_mat1(data: bytes):
+        num_entries: int = struct.unpack("<I", data[8:12])[0]
+        entry_offsets: tuple[int, ...] = struct.unpack(f"<{num_entries}I", data[12:12 + 4 * num_entries])
+        materials: list[tuple[tuple, list[tuple[int, int, int]], list[tuple[float, float, float, float, float]], list[tuple[int, int]]]] = []
 
         for entry_offset in entry_offsets:
             material = struct.unpack("<20s4B24BI", data[entry_offset:entry_offset + 0x34])
             assert (material[29] >> 6) & 0x1F == 0, "Materials components beyond texCoordGen are not handled yet!"
             
-            num_tex_maps = material[29] & 3
-            tex_maps = []
+            num_tex_maps: int = material[29] & 3
+            tex_maps: list[tuple[int, int, int]] = []
             for i in range(num_tex_maps):
                 tex_maps.append(struct.unpack("<HBB", data[entry_offset + 0x34 + 4 * i:entry_offset + 0x34 + 4 * (i + 1)]))
             
-            num_tex_mats = (material[29] >> 2) & 3
-            tex_mats = []
+            num_tex_mats: int = (material[29] >> 2) & 3
+            tex_mats: list[tuple[float, float, float, float, float]] = []
             tex_mats_start = entry_offset + 0x34 + 4 * num_tex_maps
             for i in range(num_tex_mats):
                 tex_mats.append(struct.unpack("<2ff2f", data[tex_mats_start + 20 * i:tex_mats_start + 20 * (i + 1)]))
             
-            num_tex_coords = (material[29] >> 4) & 3
-            tex_coords = []
+            num_tex_coords: int = (material[29] >> 4) & 3
+            tex_coords: list[tuple[int, int]] = []
             tex_coords_start = tex_mats_start + 20 * num_tex_mats
             for i in range(num_tex_coords):
                 tex_coords.append(struct.unpack("<2bxx", data[tex_coords_start + 4 * i:tex_coords_start + 4 * (i + 1)]))
@@ -98,10 +98,10 @@ class MaterialList:
 
         return materials
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         self.materials = MaterialList.parse_mat1(data)
 
-    def print(self, level):
+    def print(self, level: int):
         str = " " * level
         str += f"MaterialList({self.materials})\n"
         return str
@@ -110,15 +110,15 @@ class MaterialList:
         pass
 
 class Pane(Named):
-    def parse_pan1(data):
+    def parse_pan1(data: bytes):
         return PaneData(data)
 
-    def __init__(self, data):
-        self.pane_data = Pane.parse_pan1(data)
+    def __init__(self, data: bytes):
+        self.pane_data: PaneData = Pane.parse_pan1(data)
         self.children = []
         super(Pane, self).__init__(self.pane_data.name)
 
-    def get_user_data(self, name):
+    def get_user_data(self, name: str):
         # Look through all layers and find a pane/text matching the name.
         # If there is a user data after it, return that.
         check_next = False
@@ -140,7 +140,7 @@ class Pane(Named):
 
         return None
 
-    def get_named_obj(self, name):
+    def get_named_obj(self, name: str) -> Named | None:
         # Look through all layers and find a pane/text/group matching the name.
         for obj in self.children:
             if not (isinstance(obj, Pane) or isinstance(obj, Text) or isinstance(obj, Group)):
@@ -157,7 +157,7 @@ class Pane(Named):
 
         return None
 
-    def print(self, level):
+    def print(self, level: int):
         str = " " * level
         str += "Pane ({}, translation{}, rotation{}, scale{}, size{})\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size)
 
@@ -166,12 +166,12 @@ class Pane(Named):
 
         return str
     
-    def offset_material_id(self, offset):
+    def offset_material_id(self, offset: int):
         for obj in self.children:
             obj.offset_material_id(offset)
 
 class Picture(Named):
-    def parse_pic1(data):
+    def parse_pic1(data: bytes):
         tex_data = struct.unpack("<4B4B4B4BHH", data[0x4C:0x60])
         tex_coords = []
 
@@ -181,22 +181,21 @@ class Picture(Named):
 
         return PaneData(data), tex_data, tex_coords
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         self.pane_data, self.tex_data, self.tex_coords = Picture.parse_pic1(data)
         super(Picture, self).__init__(self.pane_data.name)
 
-    def print(self, level):
+    def print(self, level: int):
         str = " " * level
         str += f"Picture({self.name}, material({self.tex_data[16]}), tex_coords{self.tex_coords})\n"
         return str
     
-    def offset_material_id(self, offset):
-        # self.tex_data[16] += offset
+    def offset_material_id(self, offset: int):
         self.tex_data = (*self.tex_data[:16], self.tex_data[16] + offset, *self.tex_data[16:])
 
 
 class Text(Named):
-    def parse_txt1(data):
+    def parse_txt1(data: bytes):
         text_data = struct.unpack("<HHHHH2xIII2fff", data[0x4C:0x74])
         text_start = text_data[5]
         section_size = struct.unpack("<I", data[4:8])[0]
@@ -207,7 +206,7 @@ class Text(Named):
 
         return PaneData(data), text_data, string
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         self.pane_data, text_data, self.text = Text.parse_txt1(data)
         self.str_length = text_data[0]
         self.str_max_length = text_data[1]
@@ -221,16 +220,16 @@ class Text(Named):
         self.v_font_space = text_data[11]
         super(Text, self).__init__(self.pane_data.name)
 
-    def print(self, level):
+    def print(self, level: int):
         str = " " * level
         str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), flags({}), material_id({}), text:'{}')\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size, self.font_scale, self.h_font_space, self.v_font_space, self.flags, self.material_id, self.text)
         return str
     
-    def offset_material_id(self, offset):
+    def offset_material_id(self, offset: int):
         self.material_id += offset
 
 class Window(Named):
-    def parse_wnd1(data):
+    def parse_wnd1(data: bytes):
         wind_data = struct.unpack("<4f2b2x2I", data[0x4C:0x68])
         assert wind_data[4] in (1, 4, 8), f"Window frame count ({wind_data[4]}) not supported!"
 
@@ -254,23 +253,23 @@ class Window(Named):
 
         return PaneData(data), wind_data, cont_data, tex_coords, frames
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         self.pane_data, self.wind_data, self.cont_data, self.tex_coords, self.frames = Window.parse_wnd1(data)
         super(Window, self).__init__(self.pane_data.name)
 
-    def print(self, level):
+    def print(self, level: int):
         str = " " * level
         str += f"Window({self.name}, {self.wind_data}, {self.cont_data}, {self.tex_coords}, {self.frames})\n"
         return str
     
-    def offset_material_id(self, offset):
+    def offset_material_id(self, offset: int):
         # self.cont_data[4] += offset
         self.cont_data = (*self.cont_data[:4], self.cont_data[4] + offset, *self.cont_data[5:])
         for i, frame in enumerate(self.frames):
             # frame[0] += offset
             self.frames[i] = (frame[0] + offset, *frame[1:])
     
-    def load_texture_sizes(self, mat_list, tex_list, tex_cache):
+    def load_texture_sizes(self, mat_list, tex_list: list[str], tex_cache: cache.TextureCache):
         self.frame_sizes = []
         frame_infos = []
 
@@ -315,14 +314,14 @@ class Window(Named):
                 assert False, "8 frame windows are unimplemented!"
 
 class Bounding:
-    def parse_bnd1(data):
+    def parse_bnd1(data: bytes):
         pass
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         assert False, "Bounding element unimplemented!"
 
 class Group(Named):
-    def parse_grp1(data):
+    def parse_grp1(data: bytes):
         group_data = struct.unpack("<16sI", data[8:0x1C])
         refs = []
         for i in range(group_data[1]):
@@ -331,11 +330,11 @@ class Group(Named):
 
         return group_data[0].decode("utf-8").strip('\0'), refs
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         name, self.refs = Group.parse_grp1(data)
         super(Group, self).__init__(name)
 
-    def print(self, level):
+    def print(self, level: int):
         str = " " * level
         str += "Group({}, {})\n".format(self.name, self.refs)
         return str
@@ -344,9 +343,9 @@ class Group(Named):
         pass
 
 class UserData:
-    def parse_usd1(data):
+    def parse_usd1(data: bytes):
         entry_count = struct.unpack("<I", data[8:0xC])[0]
-        dict = {}
+        pairs: dict[str, str | list[int] | list[float]] = {}
         for i in range(entry_count):
             start = 0xC + 0xC * i
             end = start + 0xC
@@ -359,14 +358,14 @@ class UserData:
                 case 1 : value = [struct.unpack("<I", data[start + entry[1] + i * 4:start + entry[1] + i * 4 + 4])[0] for i in range(entry[2])]
                 case 2 : value = [struct.unpack("<f", data[start + entry[1] + i * 4:start + entry[1] + i * 4 + 4])[0] for i in range(entry[2])]
                 case other: assert False, f"Unknown usd1 entry type ({entry[3]})"
-            dict[key] = value
+            pairs[key] = value
 
-        return dict
+        return pairs
 
-    def __init__(self, data):
-        self.dict = UserData.parse_usd1(data)
+    def __init__(self, data: bytes):
+        self.dict: dict[str, str | list[int] | list[float]] = UserData.parse_usd1(data)
 
-    def print(self, level):
+    def print(self, level: int):
         str = " " * level
         str += "UserData({})\n".format(self.dict)
         return str
@@ -375,13 +374,13 @@ class UserData:
         pass
 
 class LayoutTree:
-    def parse_lyt1(data):
+    def parse_lyt1(data: bytes):
         assert data[:4] == b'lyt1', "Layouts should start with a lyt1!"
 
         layout_data = struct.unpack("<II2f", data[4:20])
         return layout_data
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         lyt1 = LayoutTree.parse_lyt1(data)
         self.origin_type = lyt1[1]
         self.canvas_size = (lyt1[2], lyt1[3])
@@ -391,7 +390,7 @@ class LayoutTree:
         self.last_pane = None
         self.parse_tree(data, lyt1[0])
 
-    def parse_layout_element(self, data, offset):
+    def parse_layout_element(self, data: bytes, offset: int):
         signature = data[offset:offset + 4]
         section_size = struct.unpack("<I", data[offset + 4:offset + 8])[0]
         # print(signature, section_size)
@@ -422,7 +421,7 @@ class LayoutTree:
         
         return offset + section_size
 
-    def parse_tree(self, data, offset):
+    def parse_tree(self, data: bytes, offset: int):
         while offset < len(data):
             offset = self.parse_layout_element(data, offset)
 
@@ -455,7 +454,7 @@ class LayoutTree:
         
         return str
     
-    def get_user_data(self, name):
+    def get_user_data(self, name: str):
         # Look through all layers and find a pane/text matching the name.
         # If there is a user data after it, return that.
         check_next = False
@@ -475,7 +474,7 @@ class LayoutTree:
 
         return None
 
-    def get_named_obj(self, name):
+    def get_named_obj(self, name: str):
         # Look through all layers and find a pane/text/group matching the name.
         for obj in self.children:
             if not isinstance(obj, Named):
@@ -492,18 +491,18 @@ class LayoutTree:
 
         return None
 
-    def get_toplevel_obj_of_type(self, type_name):
+    def get_toplevel_obj_of_type[T](self, type_name: type[T]) -> T:
         for child in self.children:
             if type(child) is type_name:
                 return child
         
         return None
     
-    def _offset_material_indices(self, offset):
+    def _offset_material_indices(self, offset: int):
         for obj in self.children:
             obj.offset_material_id(offset)
 
-    def merge(self, other):
+    def merge(self, other: 'LayoutTree'):
         # Take maximum bounding box for size if sizes differ
         new_size = self.canvas_size
         if self.canvas_size != other.canvas_size:
@@ -548,13 +547,13 @@ class LayoutTree:
                 self.children.append(child)
 
 class BCLYT:
-    def parse_header(data):
+    def parse_header(data: bytes):
         assert data[:4] == b'CLYT', f"Invalid header {data[:4]}, expecting {b'CLYT'}!"
         assert data[4:6] == b'\xFF\xFE', "Invalid byte order mark, big endian not supported!"
 
         header = struct.unpack("<HIIH", data[6:18])
         return header
 
-    def __init__(self, data):
+    def __init__(self, data: bytes):
         self.header = BCLYT.parse_header(data)
         self.layout = LayoutTree(data[20:])
