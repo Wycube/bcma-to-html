@@ -313,7 +313,7 @@ def main():
     # Output home pages
     if config.do_html:
         for lang_str in langs:
-            with open(output_dirs[0] + f"/Home_{lang_str}.html", "w", encoding="utf-8") as file:
+            with open(f"{output_dirs[0]}/Home_{lang_str}.html", "w", encoding="utf-8") as file:
                 file.write("<!DOCTYPE html>\n")
                 file.write("<html>\n")
                 file.write("    <head>\n")
@@ -334,6 +334,11 @@ def main():
 
                 file.write("    </body>\n")
 
+            # Copy home_page.css
+            with open(f"{output_dirs[0]}/home_page.css", "w", encoding="utf-8") as destination:
+                with open(f"{root_path}/home_page.css", "r", encoding="utf-8") as source:
+                    destination.write(source.read())
+
     # Export images from texture cache
     if config.do_imgs:
         tex_cache.export()
@@ -341,7 +346,7 @@ def main():
     # Custom font stuff (make css and copy font file to output)
     if config.custom_font is not None:
         custom_font_name = os.path.basename(config.custom_font)
-        with open(f"{root_path}/output/{custom_font_name}", "wb") as destination:
+        with open(f"{output_dirs[0]}/{custom_font_name}", "wb") as destination:
             with open(config.custom_font, "rb") as source:
                 destination.write(source.read())
         custom_font_css = CSSWriter(f"{root_path}/output/custom_font.css")
