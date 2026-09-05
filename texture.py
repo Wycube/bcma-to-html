@@ -142,6 +142,10 @@ class BCLIM:
         rounded_w = 1 << int(math.ceil(math.log2(self.header[7]))) >> 3
         rounded_h = 1 << int(math.ceil(math.log2(self.header[8]))) >> 3
         image = bytearray(self.header[7] * self.header[8] * 4)
+
+        # Make sure there is at least one tile, in case the image is smaller than 8x8
+        rounded_w = 1 if rounded_w == 0 else rounded_w
+        rounded_h = 1 if rounded_h == 0 else rounded_h
         
         # ETC1 and ETC1A4 decoding
         if self.header[9] in (10, 11):
