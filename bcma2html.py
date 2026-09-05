@@ -99,7 +99,7 @@ def export(tree: layout.LayoutTree, tex_cache: cache.TextureCache, path: str, re
     css.add_property(".manual", "width", f"{tree.canvas_size[0]}px")
     css.add_property(".manual", "height", f"{tree.canvas_size[1]}px")
     css.add_property(".manual", "white-space", "preserve nowrap")
-    css.add_property(".manual", "font-family", '"' + config.font_family + '"')
+    css.add_property(".manual", "font-family", '"' + config.font_family + '"' if config.custom_font is not None else config.font_family)
     css.add_property(".manual", "overflow", "hidden")
     css.add_property(".manual", "user-select", "text")
 
@@ -319,7 +319,7 @@ def main():
                 file.write("    <head>\n")
                 file.write(f"        <title>{config.title_name}</title>\n")
                 file.write("        <meta charset=\"utf-8\">\n")
-                file.write("        <link rel=\"stylesheet\" href=\"../home_page.css\">\n")
+                file.write("        <link rel=\"stylesheet\" href=\"home_page.css\">\n")
                 file.write("    </head>\n")
                 file.write("    <body>\n")
 
