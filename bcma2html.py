@@ -8,8 +8,8 @@ class Config:
     title_name: str
     do_html: bool
     do_css: bool
-    do_txt: bool
     do_imgs: bool
+    do_txt: bool
     font_family: str
     custom_font: str | None
 
@@ -353,7 +353,5 @@ def main():
         custom_font_css.add_property("@font-face", "font-family", '"' + config.font_family + '"')
         custom_font_css.add_property("@font-face", "src", f"url({custom_font_name})")
         custom_font_css.write()
-
-    print("Successfully Completed!")
 
 main()
