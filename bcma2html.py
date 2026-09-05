@@ -1,12 +1,23 @@
-import struct, sys, os, argparse, pathlib
+import struct, sys, os, argparse
+from dataclasses import dataclass
 import layout, manual, cache
 
 
+@dataclass
+class Config:
+    title_name: str
+    do_html: bool
+    do_css: bool
+    do_txt: bool
+    do_imgs: bool
+    font_family: str
+    custom_font: str | None
+
 class HTMLWriter:
-    def __init__(self, title: str, html_path: str, css_path: str):
+    def __init__(self, title: str, html_path: str, css_paths: list[str]):
         self.title = title
         self.html_path = html_path
-        self.css_path = css_path
+        self.css_paths = css_paths
         self.body = ""
         self.tabs = 2
 
@@ -34,8 +45,9 @@ class HTMLWriter:
             file.write(f"\t\t<title>{self.title}</title>\n")
             file.write("\t\t<meta charset=\"utf-8\">\n")
             
-            if self.css_path is not None:
-                file.write(f"\t\t<link rel=\"stylesheet\" href=\"{self.css_path}\">\n")
+            if self.css_paths is not None:
+                for path in self.css_paths:
+                    file.write(f"\t\t<link rel=\"stylesheet\" href=\"{path}\">\n")
 
             file.write("\t</head>\n")
             file.write("\t<body>\n")
@@ -61,13 +73,16 @@ class CSSWriter:
                     file.write(f"\t{property}\n")
                 file.write("}\n\n")
 
-def export(tree: layout.LayoutTree, tex_cache: cache.TextureCache, path: str, region_lang: str, title: str, do_html: bool, do_css: bool, do_txt: bool):
-    if do_txt:
+def export(tree: layout.LayoutTree, tex_cache: cache.TextureCache, path: str, region_lang: str, title: str, config: Config):
+    if config.do_txt:
         with open(f"{path}.txt", "w", encoding="utf-8") as text_file:
             convert_txt(tree, text_file)
 
-    css_name = os.path.basename(path)
-    html = HTMLWriter(title, path + ".html", css_name + ".css")
+    css_paths = [os.path.basename(path) + ".css"]
+    if config.custom_font is not None:
+        css_paths.append("../../custom_font.css")
+
+    html = HTMLWriter(title, path + ".html", css_paths)
     css = CSSWriter(path + ".css")
     
     # body, div, p
@@ -84,7 +99,7 @@ def export(tree: layout.LayoutTree, tex_cache: cache.TextureCache, path: str, re
     css.add_property(".manual", "width", f"{tree.canvas_size[0]}px")
     css.add_property(".manual", "height", f"{tree.canvas_size[1]}px")
     css.add_property(".manual", "white-space", "preserve nowrap")
-    css.add_property(".manual", "font-family", "sans-serif")
+    css.add_property(".manual", "font-family", '"' + config.font_family + '"')
     css.add_property(".manual", "overflow", "hidden")
     css.add_property(".manual", "user-select", "text")
 
@@ -93,9 +108,9 @@ def export(tree: layout.LayoutTree, tex_cache: cache.TextureCache, path: str, re
     convert(tree, tex_cache, tree, path, html, css)
     html.end_div()
 
-    if do_html:
+    if config.do_html:
         html.write()
-    if do_css:
+    if config.do_css:
         css.write()
 
 def convert(tree: layout.LayoutTree, tex_cache: cache.TextureCache, node, path: str, html: HTMLWriter, css: CSSWriter):
@@ -208,20 +223,27 @@ def main():
     parser.add_argument("manual", help="Path to the BCMA file (usually Manual.bcma)")
     parser.add_argument("-t", "--title", help="Title of the home page, defaults to the filename.")
     parser.add_argument("-l", "--lang", action="append", help="Only output a specific language in the format 'REG_la', can do multiple, all by default.")
-    parser.add_argument("--nohtml", action="store_true", help="Don't output any html.")
-    parser.add_argument("--nocss", action="store_true", help="Don't output any css.")
-    parser.add_argument("--noimgs", action="store_true", help="Don't output any images.")
+    parser.add_argument("--no-html", action="store_true", help="Don't output any html.")
+    parser.add_argument("--no-css", action="store_true", help="Don't output any css.")
+    parser.add_argument("--no-imgs", action="store_true", help="Don't output any images.")
     parser.add_argument("--txt", action="store_true", help="Additionally output a text representation of each page and the index.")
     parser.add_argument("--print", action="store_true", help="Print the filesystem of the .bcma and then exit without exporting anything.")
+    parser.add_argument("-f", "--font-family", help="The font-family to use in place of the default system font, if using a custom font file used as its name.")
+    parser.add_argument("-c", "--custom-font", help="Path to a custom font file to be used in place of the default system font, if no name is specified for the '--font-family' option then the file name will be used.")
     args = parser.parse_args()
 
     bcma_path = args.manual
     root_path = os.path.dirname(sys.argv[0])
-    title_name = args.title if args.title is not None else pathlib.Path(bcma_path).name
-    do_html = not args.nohtml
-    do_css = not args.nocss
-    do_imgs = not args.noimgs
-    do_txt = args.txt
+
+    if args.custom_font is not None:
+        assert os.path.isfile(args.custom_font), "Invalid custom font file!"
+    config = Config(args.title if args.title is not None else os.path.basename(bcma_path),
+                    not args.no_html,
+                    not args.no_css,
+                    not args.no_imgs,
+                    args.txt,
+                    args.font_family if args.font_family is not None else "sans-serif" if args.custom_font is None else os.path.basename(args.custom_font),
+                    args.custom_font)
 
     # Read in the .bcma
     bcma = None
@@ -233,7 +255,7 @@ def main():
         return
 
     # Write index text
-    if do_txt:
+    if config.do_txt:
         with open(f"output/index.txt", "w", encoding="utf-8") as text_file:
                 convert_txt(bcma.get_bcmainfo().layout, text_file)
 
@@ -283,19 +305,19 @@ def main():
                 page_tree.merge(page_file.layout)
             
             output_path = fold_dirs(output_dirs)
-            export(page_tree, tex_cache, f"{output_path}/Page_{i:03}", lang_str, bcma.get_page_title(lang_str, i).rstrip("\0"), do_html, do_css, do_txt)
+            export(page_tree, tex_cache, f"{output_path}/Page_{i:03}", lang_str, bcma.get_page_title(lang_str, i).rstrip("\0"), config)
 
         output_dirs.pop()
         output_dirs.pop()
 
     # Output home pages
-    if do_html:
+    if config.do_html:
         for lang_str in langs:
             with open(output_dirs[0] + f"/Home_{lang_str}.html", "w", encoding="utf-8") as file:
                 file.write("<!DOCTYPE html>\n")
                 file.write("<html>\n")
                 file.write("    <head>\n")
-                file.write(f"        <title>{title_name}</title>\n")
+                file.write(f"        <title>{config.title_name}</title>\n")
                 file.write("        <meta charset=\"utf-8\">\n")
                 file.write("        <link rel=\"stylesheet\" href=\"../home_page.css\">\n")
                 file.write("    </head>\n")
@@ -313,8 +335,19 @@ def main():
                 file.write("    </body>\n")
 
     # Export images from texture cache
-    if do_imgs:
+    if config.do_imgs:
         tex_cache.export()
+
+    # Custom font stuff (make css and copy font file to output)
+    if config.custom_font is not None:
+        custom_font_name = os.path.basename(config.custom_font)
+        with open(f"{root_path}/output/{custom_font_name}", "wb") as destination:
+            with open(config.custom_font, "rb") as source:
+                destination.write(source.read())
+        custom_font_css = CSSWriter(f"{root_path}/output/custom_font.css")
+        custom_font_css.add_property("@font-face", "font-family", '"' + config.font_family + '"')
+        custom_font_css.add_property("@font-face", "src", f"url({custom_font_name})")
+        custom_font_css.write()
 
     print("Successfully Completed!")
 
