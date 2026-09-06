@@ -1,23 +1,7 @@
 import struct
+from dataclasses import dataclass
 import texture, cache
 
-
-class Named:
-    def __init__(self, name: str):
-        self.name = name
-
-class PaneData:
-    def __init__(self, data: bytes):
-        pane_data: tuple[int, int, int, bytes, bytes, float, float, float, float, float, float, float, float, float, float] = struct.unpack("<bbbx16s8s3f3f2f2f", data[8:0x4C])
-        self.flags = pane_data[0]
-        self.origin = pane_data[1]
-        self.alpha = pane_data[2]
-        self.name = pane_data[3].decode("utf-8").strip('\0')
-        self.data_str = pane_data[4]
-        self.translation = (pane_data[5], pane_data[6], pane_data[7])
-        self.rotation = (pane_data[8], pane_data[9], pane_data[10])
-        self.scale = (pane_data[11], pane_data[12])
-        self.size = (pane_data[13], pane_data[14])
 
 class TextureList:
     def parse_txl1(data: bytes):
@@ -67,28 +51,59 @@ class FontList:
     def offset_material_id(self, _):
         pass
 
+@dataclass
+class Material:
+    name: bytes
+    tev_color: tuple[int, int, int, int]
+    tev_const_colors: list[tuple[int, int, int, int]]
+    flags: int
+
+    def from_bytes(data: bytes) -> 'Material':
+        material_data = struct.unpack("<20s4B24BI", data[:0x34])
+        return Material(material_data[0], material_data[1:5], [material_data[5 + 4 * i:5 + 4 * i + 4] for i in range(6)], material_data[29])
+
+@dataclass
+class TexMap:
+    index: int
+    min_s: int
+    max_t: int
+
+    def from_bytes(data: bytes) -> 'TexMap':
+        texmap_data = struct.unpack("<HBB", data[:4])
+        return TexMap(*texmap_data)
+
+@dataclass
+class TexMatrix:
+    translation: tuple[float, float]
+    rotation: float
+    scale: tuple[float, float]
+
+    def from_bytes(data: bytes) -> 'TexMatrix':
+        texmat_data = struct.unpack("<2ff2f", data[:20])
+        return TexMatrix(texmat_data[0:2], texmat_data[2], texmat_data[3:])
+
 class MaterialList:
     def parse_mat1(data: bytes):
         num_entries: int = struct.unpack("<I", data[8:12])[0]
         entry_offsets: tuple[int, ...] = struct.unpack(f"<{num_entries}I", data[12:12 + 4 * num_entries])
-        materials: list[tuple[tuple, list[tuple[int, int, int]], list[tuple[float, float, float, float, float]], list[tuple[int, int]]]] = []
+        materials: list[tuple[list[Material], list[TexMap], list[TexMatrix], list[tuple[int, int]]]] = []
 
         for entry_offset in entry_offsets:
-            material = struct.unpack("<20s4B24BI", data[entry_offset:entry_offset + 0x34])
-            assert (material[29] >> 6) & 0x1F == 0, "Materials components beyond texCoordGen are not handled yet!"
+            material = Material.from_bytes(data[entry_offset:entry_offset + 0x34])
+            assert (material.flags >> 6) & 0x1F == 0, "Materials components beyond texCoordGen are not handled yet!"
             
-            num_tex_maps: int = material[29] & 3
-            tex_maps: list[tuple[int, int, int]] = []
+            num_tex_maps = material.flags & 3
+            tex_maps: list[TexMap] = []
             for i in range(num_tex_maps):
-                tex_maps.append(struct.unpack("<HBB", data[entry_offset + 0x34 + 4 * i:entry_offset + 0x34 + 4 * (i + 1)]))
+                tex_maps.append(TexMap.from_bytes(data[entry_offset + 0x34 + 4 * i:entry_offset + 0x34 + 4 * (i + 1)]))
             
-            num_tex_mats: int = (material[29] >> 2) & 3
-            tex_mats: list[tuple[float, float, float, float, float]] = []
+            num_tex_mats = (material.flags >> 2) & 3
+            tex_mats: list[TexMatrix] = []
             tex_mats_start = entry_offset + 0x34 + 4 * num_tex_maps
             for i in range(num_tex_mats):
-                tex_mats.append(struct.unpack("<2ff2f", data[tex_mats_start + 20 * i:tex_mats_start + 20 * (i + 1)]))
+                tex_mats.append(TexMatrix.from_bytes(data[tex_mats_start + 20 * i:tex_mats_start + 20 * (i + 1)]))
             
-            num_tex_coords: int = (material[29] >> 4) & 3
+            num_tex_coords = (material.flags >> 4) & 3
             tex_coords: list[tuple[int, int]] = []
             tex_coords_start = tex_mats_start + 20 * num_tex_mats
             for i in range(num_tex_coords):
@@ -99,7 +114,7 @@ class MaterialList:
         return materials
 
     def __init__(self, data: bytes):
-        self.materials = MaterialList.parse_mat1(data)
+        self.materials: list[tuple[list[Material], list[TexMap], list[TexMatrix], list[tuple[int, int]]]] = MaterialList.parse_mat1(data)
 
     def print(self, level: int):
         str = " " * level
@@ -109,9 +124,29 @@ class MaterialList:
     def offset_material_id(self, _):
         pass
 
+class Named:
+    def __init__(self, name: str):
+        self.name = name
+
+@dataclass
+class PaneData:
+    flags: int
+    origin: int
+    alpha: int
+    name: str
+    data_str: bytes
+    translation: tuple[float, float, float]
+    rotation: tuple[float, float, float]
+    scale: tuple[float, float]
+    size: tuple[float, float]
+
+    def from_bytes(data: bytes):
+        pane_data: tuple[int, int, int, bytes, bytes, float, float, float, float, float, float, float, float, float, float] = struct.unpack("<bbbx16s8s3f3f2f2f", data[8:0x4C])
+        return PaneData(*pane_data[:3], pane_data[3].decode("utf-8").strip('\0'), pane_data[4], pane_data[5:8], pane_data[8:11], pane_data[11:13], pane_data[13:])
+
 class Pane(Named):
     def parse_pan1(data: bytes):
-        return PaneData(data)
+        return PaneData.from_bytes(data)
 
     def __init__(self, data: bytes):
         self.pane_data: PaneData = Pane.parse_pan1(data)
@@ -159,7 +194,7 @@ class Pane(Named):
 
     def print(self, level: int):
         str = " " * level
-        str += "Pane ({}, translation{}, rotation{}, scale{}, size{})\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size)
+        str += "Pane({}, {})\n".format(self.name, self.pane_data)
 
         for child in self.children:
             str += child.print(level + 1)
@@ -179,7 +214,7 @@ class Picture(Named):
             coord_data = struct.unpack("<2f2f2f2f", data[0x60 + 0x20 * i:0x60 + 0x20 * (i + 1)])
             tex_coords.append(coord_data)
 
-        return PaneData(data), tex_data, tex_coords
+        return PaneData.from_bytes(data), tex_data, tex_coords
 
     def __init__(self, data: bytes):
         self.pane_data, self.tex_data, self.tex_coords = Picture.parse_pic1(data)
@@ -204,7 +239,7 @@ class Text(Named):
         assert text_data[0] == text_data[1] and text_data[0] <= (section_size - text_start), "Text string length and max length differ!"
         string = data[text_start:text_start + text_data[0]].decode("utf-16-le")
 
-        return PaneData(data), text_data, string
+        return PaneData.from_bytes(data), text_data, string
 
     def __init__(self, data: bytes):
         self.pane_data, text_data, self.text = Text.parse_txt1(data)
@@ -222,7 +257,7 @@ class Text(Named):
 
     def print(self, level: int):
         str = " " * level
-        str += "Text: ({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), flags({}), material_id({}), text:'{}')\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size, self.font_scale, self.h_font_space, self.v_font_space, self.flags, self.material_id, self.text)
+        str += "Text({}, translation{}, rotation{}, scale{}, size{}, font_scale{}, horiz_space({}), vert_space({}), flags({}), material_id({}), text:'{}')\n".format(self.name, self.pane_data.translation, self.pane_data.rotation, self.pane_data.scale, self.pane_data.size, self.font_scale, self.h_font_space, self.v_font_space, self.flags, self.material_id, self.text)
         return str
     
     def offset_material_id(self, offset: int):
@@ -251,7 +286,7 @@ class Window(Named):
             frame_data = struct.unpack("<Hbx", data[frame_offset:frame_offset + 4])
             frames.append(frame_data)
 
-        return PaneData(data), wind_data, cont_data, tex_coords, frames
+        return PaneData.from_bytes(data), wind_data, cont_data, tex_coords, frames
 
     def __init__(self, data: bytes):
         self.pane_data, self.wind_data, self.cont_data, self.tex_coords, self.frames = Window.parse_wnd1(data)
@@ -263,13 +298,11 @@ class Window(Named):
         return str
     
     def offset_material_id(self, offset: int):
-        # self.cont_data[4] += offset
         self.cont_data = (*self.cont_data[:4], self.cont_data[4] + offset, *self.cont_data[5:])
         for i, frame in enumerate(self.frames):
-            # frame[0] += offset
             self.frames[i] = (frame[0] + offset, *frame[1:])
     
-    def load_texture_sizes(self, mat_list, tex_list: list[str], tex_cache: cache.TextureCache):
+    def load_texture_sizes(self, mat_list: MaterialList, tex_list: TextureList, tex_cache: cache.TextureCache):
         self.frame_sizes = []
         frame_infos = []
 
@@ -277,7 +310,7 @@ class Window(Named):
             material_id = frame[0]
             material = mat_list.materials[material_id]
             if len(material[1]) != 0:
-                tex_name = tex_list.textures[material[1][0][0]]
+                tex_name = tex_list.textures[material[1][0].index]
                 for darc in tex_cache.archives:
                     if darc.has_file("./timg/" + tex_name):
                         self.frame_sizes.append(texture.BCLIM.get_size(darc.get_file("./timg/" + tex_name)))
@@ -322,7 +355,7 @@ class Bounding:
 
 class Group(Named):
     def parse_grp1(data: bytes):
-        group_data = struct.unpack("<16sI", data[8:0x1C])
+        group_data: tuple[bytes, int] = struct.unpack("<16sI", data[8:0x1C])
         refs = []
         for i in range(group_data[1]):
             entry_off = 0x10 * i
@@ -349,7 +382,7 @@ class UserData:
         for i in range(entry_count):
             start = 0xC + 0xC * i
             end = start + 0xC
-            entry = struct.unpack("<IIHH", data[start:end])
+            entry: tuple[int, int, int, int] = struct.unpack("<IIHH", data[start:end])
 
             key = data[start + entry[0]:].decode("ascii", errors="replace").split('\0')[0]
             value = None
@@ -357,7 +390,7 @@ class UserData:
                 case 0 : value = data[start + entry[1]:start + entry[1] + entry[2]].decode("utf-8")
                 case 1 : value = [struct.unpack("<I", data[start + entry[1] + i * 4:start + entry[1] + i * 4 + 4])[0] for i in range(entry[2])]
                 case 2 : value = [struct.unpack("<f", data[start + entry[1] + i * 4:start + entry[1] + i * 4 + 4])[0] for i in range(entry[2])]
-                case other: assert False, f"Unknown usd1 entry type ({entry[3]})"
+                case _: assert False, f"Unknown usd1 entry type ({entry[3]})"
             pairs[key] = value
 
         return pairs
@@ -524,8 +557,8 @@ class LayoutTree:
             size = len(tex_list_1.textures)
             mat_list = other.get_toplevel_obj_of_type(MaterialList)
             for material in mat_list.materials:
-                for i, tex_map in enumerate(material[1]):
-                    material[1][i] = (tex_map[0] + size, tex_map[1], tex_map[2])
+                for tex_map in material[1]:
+                    tex_map.index += size
             
             tex_list_1.textures.extend(tex_list_2.textures)
         elif tex_list_2 is not None:

@@ -151,7 +151,7 @@ def convert(tree: layout.LayoutTree, tex_cache: cache.TextureCache, node, path: 
         assert mat_list is not None and tex_list is not None, "Material list or texture list missing!"
         
         mat_index = node.tex_data[16]
-        tex_index = mat_list.materials[mat_index][1][0][0]
+        tex_index = mat_list.materials[mat_index][1][0].index
         tex_name: str = tex_list.textures[tex_index]
         tex_cache.cache(tex_name)
         tex_name_png = tex_name.replace(".bclim", ".png")
@@ -165,7 +165,7 @@ def convert(tree: layout.LayoutTree, tex_cache: cache.TextureCache, node, path: 
         css.add_property(f".{node.name}", "height", f"{node.pane_data.size[1]}px")
 
         # TODO: Handle texture filtering and wrap modes
-        assert mat_list.materials[mat_index][1][0][1] == 4 and mat_list.materials[mat_index][1][0][2] == 4, "Texture filtering and wrap modes other than 4 are not handled yet!"
+        assert mat_list.materials[mat_index][1][0].min_s == 4 and mat_list.materials[mat_index][1][0].max_t == 4, "Texture filtering and wrap modes other than 4 are not handled yet!"
     elif type(node) == layout.Window:
         mat_list = tree.get_toplevel_obj_of_type(layout.MaterialList)
         tex_list = tree.get_toplevel_obj_of_type(layout.TextureList)
@@ -197,7 +197,7 @@ def convert(tree: layout.LayoutTree, tex_cache: cache.TextureCache, node, path: 
         
         if len(tex_index) == 1 and len(mat_list.materials[mat_index][2]) > 0 and len(mat_list.materials[mat_index][3]) > 0:
             assert tex_list is not None, "Texture list missing!"
-            tex_name: str = tex_list.textures[tex_index[0][0]]
+            tex_name: str = tex_list.textures[tex_index[0].index]
             tex_cache.cache(tex_name)
             tex_name_png = tex_name.replace(".bclim", ".png")
             css.add_property(f".{node.name}", "background-image", f"url(\"../../imgs/{tex_name_png}\")")
