@@ -96,12 +96,15 @@ class MaterialList:
             tex_maps: list[TexMap] = []
             for i in range(num_tex_maps):
                 tex_maps.append(TexMap.from_bytes(data[entry_offset + 0x34 + 4 * i:entry_offset + 0x34 + 4 * (i + 1)]))
+                assert tex_maps[-1].max_t == 4 and tex_maps[-1].min_s == 4, "Texture filtering and wrap modes other than 4 are not handled yet!"
             
             num_tex_mats = (material.flags >> 2) & 3
             tex_mats: list[TexMatrix] = []
             tex_mats_start = entry_offset + 0x34 + 4 * num_tex_maps
             for i in range(num_tex_mats):
                 tex_mats.append(TexMatrix.from_bytes(data[tex_mats_start + 20 * i:tex_mats_start + 20 * (i + 1)]))
+                assert tex_mats[-1] == TexMatrix((0, 0), 0, (1, 1)), "Non-identity texture matrices not handled yet!"
+
             
             num_tex_coords = (material.flags >> 4) & 3
             tex_coords: list[tuple[int, int]] = []
@@ -142,6 +145,10 @@ class PaneData:
 
     def from_bytes(data: bytes):
         pane_data: tuple[int, int, int, bytes, bytes, float, float, float, float, float, float, float, float, float, float] = struct.unpack("<bbbx16s8s3f3f2f2f", data[8:0x4C])
+        assert pane_data[0] == 1, f"Pane flags '{pane_data[0]}' not handled yet!"
+        # assert pane_data[1] == 0, f"Pane origin '{pane_data[1]}' not handled yet!"
+        assert pane_data[8:11] == (0, 0, 0), f"Pane rotation '{pane_data[8:11]}' not handled yet!"
+        assert pane_data[11:13] == (1, 1), f"Pane scale '{pane_data[11:13]}' not handled yet!"
         return PaneData(*pane_data[:3], pane_data[3].decode("utf-8").strip('\0'), pane_data[4], pane_data[5:8], pane_data[8:11], pane_data[11:13], pane_data[13:])
 
 class Pane(Named):
@@ -247,12 +254,14 @@ class Text(Named):
         self.str_max_length = text_data[1]
         self.material_id = text_data[2]
         self.font_id = text_data[3]
+        assert self.font_id == 0, "Other fonts not handled yet!"
         self.flags = text_data[4]
         self.top_color = text_data[6]
         self.bottom_color = text_data[7]
         self.font_scale = (text_data[8], text_data[9])
         self.h_font_space = text_data[10]
         self.v_font_space = text_data[11]
+        # assert self.v_font_space == 0, "Vertical spacing not handled yet!"
         super(Text, self).__init__(self.pane_data.name)
 
     def print(self, level: int):

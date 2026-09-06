@@ -163,9 +163,6 @@ def convert(tree: layout.LayoutTree, tex_cache: cache.TextureCache, node, path: 
         css.add_property(f".{node.name}", "top", f"{-node.pane_data.translation[1]}px")
         css.add_property(f".{node.name}", "width", f"{node.pane_data.size[0]}px")
         css.add_property(f".{node.name}", "height", f"{node.pane_data.size[1]}px")
-
-        # TODO: Handle texture filtering and wrap modes
-        assert mat_list.materials[mat_index][1][0].min_s == 4 and mat_list.materials[mat_index][1][0].max_t == 4, "Texture filtering and wrap modes other than 4 are not handled yet!"
     elif type(node) == layout.Window:
         mat_list = tree.get_toplevel_obj_of_type(layout.MaterialList)
         tex_list = tree.get_toplevel_obj_of_type(layout.TextureList)
