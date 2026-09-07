@@ -113,6 +113,17 @@ def export(tree: layout.LayoutTree, tex_cache: cache.TextureCache, path: str, re
     if config.do_css:
         css.write()
 
+def get_tex_coord_transform(coords: tuple[float, float, float, float, float, float, float, float]):
+    match coords:
+        case (0, 0, 1, 0, 0, 1, 1, 1): return (0, False, False)
+        case (1, 0, 1, 1, 0, 0, 0, 1): return (90, False, False)
+        case (0, 1, 0, 0, 1, 1, 0, 1): return (-90, False, False)
+        case (1, 1, 0, 1, 1, 0, 0, 0): return (180, False, False)
+        case (1, 0, 0, 0, 1, 1, 0, 1): return (0, True, False)
+        case (0, 1, 1, 1, 0, 0, 1, 0): return (0, False, True)
+        case _: assert False, f"Non-trivial texture coordinate ({coords}) not handled yet!"
+
+
 def convert(tree: layout.LayoutTree, tex_cache: cache.TextureCache, node, path: str, html: HTMLWriter, css: CSSWriter):
     if type(node) == layout.Pane:
         html.start_div(node.name)
@@ -142,10 +153,11 @@ def convert(tree: layout.LayoutTree, tex_cache: cache.TextureCache, node, path: 
         css.add_property(f".{node.name}", "letter-spacing", f"{node.h_font_space}px")
         css.add_property(f".{node.name}", "color", f"#{font_color:08X}")
     elif type(node) == layout.Picture:
-        assert node.tex_coords == [(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0)], f"Texcoords other than default not handled yet! {node.tex_coords}"
+        assert len(node.tex_coords) <= 1, f"Multiple texcoords ({len(node.tex_coords)}) not handled yet!"
         for col in node.tex_data[:16]:
             assert col == 255, "Vertex other than white not handled yet!"
-        
+
+        transform = get_tex_coord_transform(node.tex_coords[0]) if len(node.tex_coords) == 1 else (0, False, False)
         mat_list = tree.get_toplevel_obj_of_type(layout.MaterialList)
         tex_list = tree.get_toplevel_obj_of_type(layout.TextureList)
         assert mat_list is not None and tex_list is not None, "Material list or texture list missing!"
@@ -163,6 +175,9 @@ def convert(tree: layout.LayoutTree, tex_cache: cache.TextureCache, node, path: 
         css.add_property(f".{node.name}", "top", f"{-node.pane_data.translation[1]}px")
         css.add_property(f".{node.name}", "width", f"{node.pane_data.size[0]}px")
         css.add_property(f".{node.name}", "height", f"{node.pane_data.size[1]}px")
+
+        if transform != (0, False, False):
+            css.add_property(f".{node.name}", "transform", "rotate({}deg) scaleX({}1) scaleY({}1)".format(transform[0], "-" if transform[1] else "", "-" if transform[2] else ""))
     elif type(node) == layout.Window:
         mat_list = tree.get_toplevel_obj_of_type(layout.MaterialList)
         tex_list = tree.get_toplevel_obj_of_type(layout.TextureList)
