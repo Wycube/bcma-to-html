@@ -242,6 +242,7 @@ def main():
     parser.add_argument("--print", action="store_true", help="Print the filesystem of the .bcma and then exit without exporting anything.")
     parser.add_argument("-f", "--font-family", help="The font-family to use in place of the default system font, if using a custom font file used as its name.")
     parser.add_argument("-c", "--custom-font", help="Path to a custom font file to be used in place of the default system font, if no name is specified for the '--font-family' option then the file name will be used.")
+    parser.add_argument("-b", "--big", action="store_true", help="Convert the large versions of pages instead of the small ones.")
     args = parser.parse_args()
 
     bcma_path = args.manual
@@ -304,16 +305,16 @@ def main():
             category_html += "</div>"
         categories_html[lang_str] = category_html
 
-        # Convert each page (small ones for now)
+        # Convert each page (small or big, selected by cl option)
         for i in range(bcma.get_page_count(lang_str)):
             page_tree = None
 
             # Background
-            page_file = bcma.get_page_bg(lang_str, i)
+            page_file = bcma.get_page_bg(lang_str, i, args.big)
             page_tree = page_file.layout
             
-            for split in range(bcma.get_page_splits(lang_str, i)):
-                page_file = bcma.get_page_split(lang_str, i, split)
+            for split in range(bcma.get_page_splits(lang_str, i, args.big)):
+                page_file = bcma.get_page_split(lang_str, i, split, args.big)
                 page_tree.merge(page_file.layout)
             
             output_path = fold_dirs(output_dirs)
